@@ -23,9 +23,13 @@ const FOAM_FACTOR = 0.8;
 const WAVE_SPEED = 1.2;
 
 // Track constants
-const TRACK_WIDTH = 200;
-const BARRIER_HEIGHT = 30;
-const CHECKPOINT_COUNT = 8;
+const TRACK_CONSTANTS = {
+    WIDTH: 200,
+    BARRIER_HEIGHT: 40,
+    RAMP_HEIGHT: 60,
+    BOOST_PAD_LENGTH: 100,
+    WATER_JET_FORCE: 2000
+};
 
 // Game state
 let playerBoat;
@@ -45,6 +49,12 @@ let trackBarriers = [];
 let checkpoints = [];
 let currentCheckpoint = 0;
 let lapCount = 0;
+
+// Track state additions
+let boostPads = [];
+let waterJets = [];
+let hazards = [];
+let trackLights = [];
 
 // Multiplayer
 const socket = io({
@@ -146,7 +156,7 @@ function init() {
     playerBoat.position.set(0, 5, 0);
     scene.add(playerBoat);
 
-    // Create the Neon Lagoon track
+    // Create the Neon Surge track
     createNeonLagoonTrack();
 
     // Update initial boat position
@@ -276,45 +286,111 @@ function usePowerUp() {
     document.getElementById('power-up').textContent = 'NO POWER-UP';
 }
 
-// Create the Neon Lagoon track
+// Create the Neon Surge track
 function createNeonLagoonTrack() {
-    // Define track path points (x, z coordinates)
+    // Define a more exciting track path with tight turns and straights
     const trackPath = [
-        { x: 0, z: 0 },
-        { x: 300, z: 200 },
-        { x: 600, z: 0 },
-        { x: 800, z: -400 },
-        { x: 400, z: -800 },
-        { x: -200, z: -600 },
-        { x: -400, z: -200 },
-        { x: -200, z: 200 }
+        { x: 0, z: 0 }, // Start line
+        { x: 400, z: 100 }, // First gentle curve
+        { x: 800, z: 400 }, // Lead into first tunnel
+        { x: 1000, z: 800 }, // Sharp turn after tunnel
+        { x: 600, z: 1200 }, // S-curve start
+        { x: 200, z: 1000 }, // S-curve middle
+        { x: -200, z: 1200 }, // S-curve end
+        { x: -600, z: 800 }, // Approach to mega ramp
+        { x: -400, z: 400 }, // Final stretch
+        { x: -200, z: 200 } // Back to start
     ];
 
     trackPoints = trackPath;
 
-    // Create glowing barriers
-    const barrierMaterial = new THREE.MeshPhongMaterial({
-        color: 0x00ff88,
-        emissive: 0x00ff88,
-        emissiveIntensity: 0.5,
+    // Create the track base (glowing water channel)
+    createWaterChannel(trackPath);
+    
+    // Add neon barriers with dynamic lighting
+    createNeonBarriers(trackPath);
+    
+    // Add interactive elements
+    addBoostPads(trackPath);
+    addWaterJets(trackPath);
+    addHazards(trackPath);
+    
+    // Add the mega ramp near the end
+    createMegaRamp(trackPath[7], trackPath[8]); // Position between points 7 and 8
+    
+    // Add checkpoints with neon effects
+    createCheckpoints(trackPath);
+    
+    // Add ambient lighting and effects
+    createAmbientEffects(trackPath);
+}
+
+function createWaterChannel(trackPath) {
+    // Create a glowing water channel effect
+    const channelGeometry = new THREE.PlaneGeometry(TRACK_CONSTANTS.WIDTH, TRACK_CONSTANTS.WIDTH);
+    const channelMaterial = new THREE.MeshPhongMaterial({
+        color: 0x0044ff,
+        emissive: 0x0033aa,
         transparent: true,
-        opacity: 0.8
+        opacity: 0.6
     });
 
-    // Create track barriers
     for (let i = 0; i < trackPath.length; i++) {
         const start = trackPath[i];
         const end = trackPath[(i + 1) % trackPath.length];
+        const segment = new THREE.Mesh(channelGeometry, channelMaterial);
+        
+        // Position and rotate segment
+        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z);
+        const length = direction.length();
+        segment.scale.x = length / TRACK_CONSTANTS.WIDTH;
+        
+        segment.position.set(
+            (start.x + end.x) / 2,
+            WATER_LEVEL + 0.1,
+            (start.z + end.z) / 2
+        );
+        
+        segment.rotation.y = Math.atan2(direction.y, direction.x);
+        segment.rotation.x = -Math.PI / 2;
+        
+        scene.add(segment);
+    }
+}
 
+function createNeonBarriers(trackPath) {
+    // Create glowing neon barriers with dynamic lighting
+    const barrierMaterial = new THREE.MeshPhongMaterial({
+        color: 0x00ff88,
+        emissive: 0x00ff88,
+        emissiveIntensity: 0.8,
+        transparent: true,
+        opacity: 0.9
+    });
+
+    for (let i = 0; i < trackPath.length; i++) {
+        const start = trackPath[i];
+        const end = trackPath[(i + 1) % trackPath.length];
+        
         // Calculate barrier positions
         const direction = new THREE.Vector2(end.x - start.x, end.z - start.z).normalize();
         const normal = new THREE.Vector2(-direction.y, direction.x);
         const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.z - start.z, 2));
 
-        // Create outer barriers
-        const barrierGeometry = new THREE.BoxGeometry(length, BARRIER_HEIGHT, 5);
+        // Create barriers with neon trim
+        const barrierGeometry = new THREE.BoxGeometry(length, TRACK_CONSTANTS.BARRIER_HEIGHT, 5);
         const leftBarrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
         const rightBarrier = new THREE.Mesh(barrierGeometry.clone(), barrierMaterial);
+
+        // Add neon trim lights
+        const trimLight = new THREE.PointLight(0x00ff88, 0.5, 50);
+        trimLight.position.set(
+            (start.x + end.x) / 2,
+            TRACK_CONSTANTS.BARRIER_HEIGHT,
+            (start.z + end.z) / 2
+        );
+        scene.add(trimLight);
+        trackLights.push(trimLight);
 
         // Position barriers
         const angle = Math.atan2(direction.y, direction.x);
@@ -322,14 +398,14 @@ function createNeonLagoonTrack() {
         const midZ = (start.z + end.z) / 2;
 
         leftBarrier.position.set(
-            midX + normal.x * TRACK_WIDTH/2,
-            BARRIER_HEIGHT/2,
-            midZ + normal.y * TRACK_WIDTH/2
+            midX + normal.x * TRACK_CONSTANTS.WIDTH/2,
+            TRACK_CONSTANTS.BARRIER_HEIGHT/2,
+            midZ + normal.y * TRACK_CONSTANTS.WIDTH/2
         );
         rightBarrier.position.set(
-            midX - normal.x * TRACK_WIDTH/2,
-            BARRIER_HEIGHT/2,
-            midZ - normal.y * TRACK_WIDTH/2
+            midX - normal.x * TRACK_CONSTANTS.WIDTH/2,
+            TRACK_CONSTANTS.BARRIER_HEIGHT/2,
+            midZ - normal.y * TRACK_CONSTANTS.WIDTH/2
         );
 
         leftBarrier.rotation.y = angle;
@@ -339,59 +415,133 @@ function createNeonLagoonTrack() {
         scene.add(rightBarrier);
         trackBarriers.push(leftBarrier, rightBarrier);
     }
-
-    // Create checkpoints
-    const checkpointMaterial = new THREE.MeshPhongMaterial({
-        color: 0xff3366,
-        transparent: true,
-        opacity: 0.3
-    });
-
-    for (let i = 0; i < trackPath.length; i++) {
-        const start = trackPath[i];
-        const end = trackPath[(i + 1) % trackPath.length];
-        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z).normalize();
-        const midX = (start.x + end.x) / 2;
-        const midZ = (start.z + end.z) / 2;
-
-        const checkpointGeometry = new THREE.BoxGeometry(5, BARRIER_HEIGHT * 1.5, TRACK_WIDTH);
-        const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
-        
-        checkpoint.position.set(midX, BARRIER_HEIGHT/2, midZ);
-        checkpoint.rotation.y = Math.atan2(direction.y, direction.x);
-        
-        scene.add(checkpoint);
-        checkpoints.push(checkpoint);
-    }
-
-    // Add ramps at specific points
-    addRamps(trackPath);
 }
 
-// Add ramps to the track
-function addRamps(trackPath) {
+function createMegaRamp(startPoint, endPoint) {
+    // Create the mega ramp with dramatic lighting
     const rampMaterial = new THREE.MeshPhongMaterial({
         color: 0x3366ff,
         emissive: 0x3366ff,
-        emissiveIntensity: 0.3
+        emissiveIntensity: 0.6,
+        metalness: 0.7,
+        roughness: 0.3
     });
 
-    // Add ramps at specific track segments
-    const rampPositions = [2, 5]; // Indices of track segments to add ramps
-    
-    rampPositions.forEach(index => {
-        const start = trackPath[index];
-        const end = trackPath[(index + 1) % trackPath.length];
-        const midX = (start.x + end.x) / 2;
-        const midZ = (start.z + end.z) / 2;
+    const rampGeometry = new THREE.BoxGeometry(TRACK_CONSTANTS.WIDTH * 0.8, TRACK_CONSTANTS.RAMP_HEIGHT, TRACK_CONSTANTS.WIDTH);
+    const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
 
-        const rampGeometry = new THREE.BoxGeometry(80, 40, TRACK_WIDTH * 0.8);
-        const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
+    // Position the ramp
+    const direction = new THREE.Vector2(
+        endPoint.x - startPoint.x,
+        endPoint.z - startPoint.z
+    ).normalize();
+
+    ramp.position.set(
+        startPoint.x + direction.x * 100,
+        TRACK_CONSTANTS.RAMP_HEIGHT/2,
+        startPoint.z + direction.y * 100
+    );
+
+    // Angle the ramp for dramatic jumps
+    ramp.rotation.x = -Math.PI / 6;
+    ramp.rotation.y = Math.atan2(direction.y, direction.x);
+
+    // Add dramatic lighting
+    const rampLight1 = new THREE.SpotLight(0x3366ff, 2);
+    rampLight1.position.set(
+        ramp.position.x + 50,
+        TRACK_CONSTANTS.RAMP_HEIGHT * 2,
+        ramp.position.z
+    );
+    rampLight1.target = ramp;
+
+    const rampLight2 = new THREE.SpotLight(0xff3366, 2);
+    rampLight2.position.set(
+        ramp.position.x - 50,
+        TRACK_CONSTANTS.RAMP_HEIGHT * 2,
+        ramp.position.z
+    );
+    rampLight2.target = ramp;
+
+    scene.add(ramp);
+    scene.add(rampLight1);
+    scene.add(rampLight2);
+    trackLights.push(rampLight1, rampLight2);
+}
+
+function addBoostPads(trackPath) {
+    const boostGeometry = new THREE.PlaneGeometry(TRACK_CONSTANTS.BOOST_PAD_LENGTH, TRACK_CONSTANTS.WIDTH * 0.3);
+    const boostMaterial = new THREE.MeshPhongMaterial({
+        color: 0xff3366,
+        emissive: 0xff3366,
+        transparent: true,
+        opacity: 0.7
+    });
+
+    // Add boost pads at strategic points
+    [1, 3, 5, 7].forEach(index => {
+        const point = trackPath[index];
+        const nextPoint = trackPath[(index + 1) % trackPath.length];
         
-        ramp.position.set(midX, 20, midZ);
-        ramp.rotation.x = -Math.PI / 8; // Angle the ramp up
+        const boostPad = new THREE.Mesh(boostGeometry, boostMaterial);
+        const direction = new THREE.Vector2(
+            nextPoint.x - point.x,
+            nextPoint.z - point.z
+        ).normalize();
+
+        boostPad.position.set(
+            point.x + direction.x * 50,
+            WATER_LEVEL + 0.2,
+            point.z + direction.y * 50
+        );
+        boostPad.rotation.x = -Math.PI / 2;
+        boostPad.rotation.y = Math.atan2(direction.y, direction.x);
+
+        scene.add(boostPad);
+        boostPads.push(boostPad);
+    });
+}
+
+function addWaterJets(trackPath) {
+    // Add water jets at tight turns
+    [2, 4, 6].forEach(index => {
+        const point = trackPath[index];
+        const jetGeometry = new THREE.CylinderGeometry(2, 5, 20, 8);
+        const jetMaterial = new THREE.MeshPhongMaterial({
+            color: 0x0088ff,
+            transparent: true,
+            opacity: 0.6
+        });
+
+        const jet = new THREE.Mesh(jetGeometry, jetMaterial);
+        jet.position.set(point.x, WATER_LEVEL, point.z);
         
-        scene.add(ramp);
+        scene.add(jet);
+        waterJets.push(jet);
+    });
+}
+
+function addHazards(trackPath) {
+    // Add floating hazards
+    const hazardGeometry = new THREE.SphereGeometry(5, 8, 8);
+    const hazardMaterial = new THREE.MeshPhongMaterial({
+        color: 0xff0000,
+        emissive: 0xff0000,
+        emissiveIntensity: 0.5
+    });
+
+    [2, 5, 7].forEach(index => {
+        const point = trackPath[index];
+        const hazard = new THREE.Mesh(hazardGeometry, hazardMaterial);
+        
+        hazard.position.set(
+            point.x + (Math.random() - 0.5) * TRACK_CONSTANTS.WIDTH * 0.5,
+            WATER_LEVEL + 5,
+            point.z + (Math.random() - 0.5) * TRACK_CONSTANTS.WIDTH * 0.5
+        );
+        
+        scene.add(hazard);
+        hazards.push(hazard);
     });
 }
 
@@ -467,7 +617,7 @@ function update() {
         playerBoat.position.z - checkpointPos.z
     ).length();
 
-    if (distanceToCheckpoint < TRACK_WIDTH/2) {
+    if (distanceToCheckpoint < TRACK_CONSTANTS.WIDTH/2) {
         currentCheckpoint = (currentCheckpoint + 1) % checkpoints.length;
         if (currentCheckpoint === 0) {
             lapCount++;
@@ -517,20 +667,31 @@ socket.on('powerUpEffect', (data) => {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
-    
     const delta = clock.getDelta();
     
-    // Update water
+    // Animate water
     water.material.uniforms['time'].value += delta * WAVE_SPEED;
     
-    // Make waves higher in the direction of boat movement
-    if (Math.abs(speed) > 100) {
-        const boatDir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
-        water.material.uniforms['distortionScale'].value = 
-            WATER_DISTORTION_SCALE + (Math.abs(speed) / MAX_SPEED * boatDir.z * FOAM_FACTOR);
-    } else {
-        water.material.uniforms['distortionScale'].value = WATER_DISTORTION_SCALE;
-    }
+    // Animate boost pads
+    boostPads.forEach(pad => {
+        pad.material.emissiveIntensity = 0.5 + Math.sin(Date.now() * 0.005) * 0.3;
+    });
+
+    // Animate water jets
+    waterJets.forEach(jet => {
+        jet.scale.y = 1 + Math.sin(Date.now() * 0.003) * 0.3;
+    });
+
+    // Animate hazards
+    hazards.forEach(hazard => {
+        hazard.position.y = WATER_LEVEL + 5 + Math.sin(Date.now() * 0.002) * 2;
+        hazard.rotation.y += delta;
+    });
+
+    // Animate neon lights
+    trackLights.forEach(light => {
+        light.intensity = 0.5 + Math.sin(Date.now() * 0.003) * 0.2;
+    });
     
     update();
     renderer.render(scene, camera);
