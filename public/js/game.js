@@ -276,73 +276,99 @@ function usePowerUp() {
 
 // Create the Neon Surge track
 function createNeonLagoonTrack() {
-    // Define a more exciting track path with tight turns and straights
-    const trackPath = [
-        { x: 0, z: 0 }, // Start line
-        { x: 400, z: 100 }, // First gentle curve
-        { x: 800, z: 400 }, // Lead into first tunnel
-        { x: 1000, z: 800 }, // Sharp turn after tunnel
-        { x: 600, z: 1200 }, // S-curve start
-        { x: 200, z: 1000 }, // S-curve middle
-        { x: -200, z: 1200 }, // S-curve end
-        { x: -600, z: 800 }, // Approach to mega ramp
-        { x: -400, z: 400 }, // Final stretch
-        { x: -200, z: 200 } // Back to start
-    ];
+    try {
+        console.log('Starting track creation...');
+        
+        // Define a more exciting track path with tight turns and straights
+        const trackPath = [
+            { x: 0, z: 0 }, // Start line
+            { x: 200, z: 50 }, // First gentle curve
+            { x: 400, z: 200 }, // Lead into first tunnel
+            { x: 500, z: 400 }, // Sharp turn after tunnel
+            { x: 300, z: 600 }, // S-curve start
+            { x: 100, z: 500 }, // S-curve middle
+            { x: -100, z: 600 }, // S-curve end
+            { x: -300, z: 400 }, // Approach to mega ramp
+            { x: -200, z: 200 }, // Final stretch
+            { x: -100, z: 100 } // Back to start
+        ];
 
-    trackPoints = trackPath;
+        console.log('Track path defined');
+        trackPoints = trackPath;
 
-    // Create the track base (glowing water channel)
-    createWaterChannel(trackPath);
-    
-    // Add neon barriers with dynamic lighting
-    createNeonBarriers(trackPath);
-    
-    // Add interactive elements
-    addBoostPads(trackPath);
-    addWaterJets(trackPath);
-    addHazards(trackPath);
-    
-    // Add the mega ramp near the end
-    createMegaRamp(trackPath[7], trackPath[8]); // Position between points 7 and 8
-    
-    // Add checkpoints with neon effects
-    createCheckpoints(trackPath);
-    
-    // Add ambient lighting and effects
-    createAmbientEffects(trackPath);
+        // Create the track base (glowing water channel)
+        console.log('Creating water channel...');
+        createWaterChannel(trackPath);
+        
+        // Add neon barriers with dynamic lighting
+        console.log('Creating neon barriers...');
+        createNeonBarriers(trackPath);
+        
+        // Add interactive elements
+        console.log('Adding boost pads...');
+        addBoostPads(trackPath);
+        
+        console.log('Adding water jets...');
+        addWaterJets(trackPath);
+        
+        console.log('Adding hazards...');
+        addHazards(trackPath);
+        
+        // Add the mega ramp near the end
+        console.log('Creating mega ramp...');
+        createMegaRamp(trackPath[7], trackPath[8]);
+        
+        // Add checkpoints with neon effects
+        console.log('Creating checkpoints...');
+        createCheckpoints(trackPath);
+        
+        console.log('Track creation completed successfully');
+    } catch (error) {
+        console.error('Error creating track:', error);
+    }
 }
 
 function createWaterChannel(trackPath) {
-    // Create a glowing water channel effect
-    const channelGeometry = new THREE.PlaneGeometry(TRACK_CONSTANTS.WIDTH, TRACK_CONSTANTS.WIDTH);
-    const channelMaterial = new THREE.MeshPhongMaterial({
-        color: 0x0044ff,
-        emissive: 0x0033aa,
-        transparent: true,
-        opacity: 0.6
-    });
-
-    for (let i = 0; i < trackPath.length; i++) {
-        const start = trackPath[i];
-        const end = trackPath[(i + 1) % trackPath.length];
-        const segment = new THREE.Mesh(channelGeometry, channelMaterial);
-        
-        // Position and rotate segment
-        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z);
-        const length = direction.length();
-        segment.scale.x = length / TRACK_CONSTANTS.WIDTH;
-        
-        segment.position.set(
-            (start.x + end.x) / 2,
-            WATER_LEVEL + 0.1,
-            (start.z + end.z) / 2
-        );
-        
-        segment.rotation.y = Math.atan2(direction.y, direction.x);
-        segment.rotation.x = -Math.PI / 2;
-        
-        scene.add(segment);
+    try {
+        // Create a glowing water channel effect
+        for (let i = 0; i < trackPath.length; i++) {
+            const start = trackPath[i];
+            const end = trackPath[(i + 1) % trackPath.length];
+            
+            // Calculate segment properties
+            const direction = new THREE.Vector2(
+                end.x - start.x,
+                end.z - start.z
+            );
+            const length = direction.length();
+            const angle = Math.atan2(direction.y, direction.x);
+            
+            // Create segment geometry
+            const segmentGeometry = new THREE.PlaneGeometry(length, TRACK_CONSTANTS.WIDTH);
+            const segmentMaterial = new THREE.MeshPhongMaterial({
+                color: 0x0044ff,
+                emissive: 0x0033aa,
+                transparent: true,
+                opacity: 0.6
+            });
+            
+            const segment = new THREE.Mesh(segmentGeometry, segmentMaterial);
+            
+            // Position segment
+            segment.position.set(
+                (start.x + end.x) / 2,
+                WATER_LEVEL + 0.1,
+                (start.z + end.z) / 2
+            );
+            
+            // Rotate segment
+            segment.rotation.x = -Math.PI / 2;
+            segment.rotation.y = angle;
+            
+            scene.add(segment);
+        }
+    } catch (error) {
+        console.error('Error creating water channel:', error);
     }
 }
 
@@ -533,6 +559,35 @@ function addHazards(trackPath) {
     });
 }
 
+// Create checkpoints
+function createCheckpoints(trackPath) {
+    const checkpointGeometry = new THREE.BoxGeometry(TRACK_CONSTANTS.WIDTH, 20, 5);
+    const checkpointMaterial = new THREE.MeshPhongMaterial({
+        color: 0xffff00,
+        emissive: 0xffff00,
+        transparent: true,
+        opacity: 0.3
+    });
+
+    trackPath.forEach((point, index) => {
+        const nextPoint = trackPath[(index + 1) % trackPath.length];
+        const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
+        
+        // Position checkpoint
+        checkpoint.position.set(point.x, 10, point.z);
+        
+        // Rotate checkpoint to face next point
+        const direction = new THREE.Vector2(
+            nextPoint.x - point.x,
+            nextPoint.z - point.z
+        );
+        checkpoint.rotation.y = Math.atan2(direction.x, direction.y);
+        
+        scene.add(checkpoint);
+        checkpoints.push(checkpoint);
+    });
+}
+
 // Update game state
 function update() {
     const delta = clock.getDelta();
@@ -597,19 +652,23 @@ function update() {
         isDrifting: isDrifting
     });
 
-    // Check if passed through checkpoint
-    const nextCheckpoint = checkpoints[currentCheckpoint];
-    const checkpointPos = nextCheckpoint.position;
-    const distanceToCheckpoint = new THREE.Vector2(
-        playerBoat.position.x - checkpointPos.x,
-        playerBoat.position.z - checkpointPos.z
-    ).length();
+    // Check if passed through checkpoint (only if checkpoints exist)
+    if (checkpoints.length > 0 && currentCheckpoint < checkpoints.length) {
+        const nextCheckpoint = checkpoints[currentCheckpoint];
+        if (nextCheckpoint) {
+            const checkpointPos = nextCheckpoint.position;
+            const distanceToCheckpoint = new THREE.Vector2(
+                playerBoat.position.x - checkpointPos.x,
+                playerBoat.position.z - checkpointPos.z
+            ).length();
 
-    if (distanceToCheckpoint < TRACK_CONSTANTS.WIDTH/2) {
-        currentCheckpoint = (currentCheckpoint + 1) % checkpoints.length;
-        if (currentCheckpoint === 0) {
-            lapCount++;
-            console.log(`Lap ${lapCount} completed!`);
+            if (distanceToCheckpoint < TRACK_CONSTANTS.WIDTH/2) {
+                currentCheckpoint = (currentCheckpoint + 1) % checkpoints.length;
+                if (currentCheckpoint === 0) {
+                    lapCount++;
+                    console.log(`Lap ${lapCount} completed!`);
+                }
+            }
         }
     }
 }
@@ -658,39 +717,59 @@ function animate() {
     
     if (!isGameStarted) return;
     
-    const delta = clock.getDelta();
-    
-    // Update controls
-    controls.update();
-    
-    // Animate water
-    if (water && water.material.uniforms) {
-        water.material.uniforms['time'].value += delta * WAVE_SPEED;
+    try {
+        const delta = clock.getDelta();
+        
+        // Update controls
+        controls.update();
+        
+        // Animate water
+        if (water && water.material && water.material.uniforms) {
+            water.material.uniforms['time'].value += delta * WAVE_SPEED;
+        }
+        
+        // Animate boost pads
+        if (boostPads) {
+            boostPads.forEach(pad => {
+                if (pad && pad.material) {
+                    pad.material.emissiveIntensity = 0.5 + Math.sin(Date.now() * 0.005) * 0.3;
+                }
+            });
+        }
+
+        // Animate water jets
+        if (waterJets) {
+            waterJets.forEach(jet => {
+                if (jet) {
+                    jet.scale.y = 1 + Math.sin(Date.now() * 0.003) * 0.3;
+                }
+            });
+        }
+
+        // Animate hazards
+        if (hazards) {
+            hazards.forEach(hazard => {
+                if (hazard) {
+                    hazard.position.y = WATER_LEVEL + 5 + Math.sin(Date.now() * 0.002) * 2;
+                    hazard.rotation.y += delta;
+                }
+            });
+        }
+
+        // Animate neon lights
+        if (trackLights) {
+            trackLights.forEach(light => {
+                if (light) {
+                    light.intensity = 0.5 + Math.sin(Date.now() * 0.003) * 0.2;
+                }
+            });
+        }
+        
+        update();
+        renderer.render(scene, camera);
+    } catch (error) {
+        console.error('Error in animation loop:', error);
     }
-    
-    // Animate boost pads
-    boostPads.forEach(pad => {
-        pad.material.emissiveIntensity = 0.5 + Math.sin(Date.now() * 0.005) * 0.3;
-    });
-
-    // Animate water jets
-    waterJets.forEach(jet => {
-        jet.scale.y = 1 + Math.sin(Date.now() * 0.003) * 0.3;
-    });
-
-    // Animate hazards
-    hazards.forEach(hazard => {
-        hazard.position.y = WATER_LEVEL + 5 + Math.sin(Date.now() * 0.002) * 2;
-        hazard.rotation.y += delta;
-    });
-
-    // Animate neon lights
-    trackLights.forEach(light => {
-        light.intensity = 0.5 + Math.sin(Date.now() * 0.003) * 0.2;
-    });
-    
-    update();
-    renderer.render(scene, camera);
 }
 
 // Start the game
