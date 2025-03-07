@@ -73,13 +73,43 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log('Start button found, adding click listener');
     
-    // Add a direct keyboard test
+    // Add a direct keyboard test that directly updates speed
     window.addEventListener('keydown', function(e) {
         console.log('Direct keydown test:', e.key);
-        // Update the HUD directly to test
+        
+        // Directly update speed and HUD
         if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-            speedMeter.textContent = 'UP KEY PRESSED!';
+            // Force speed to increase
+            speed = 500;
+            speedMeter.textContent = `DIRECT: ${Math.round(speed)} KPH`;
             speedMeter.style.color = 'red';
+            console.log('Directly set speed to:', speed);
+            
+            // Force boat to move forward
+            if (playerBoat) {
+                const forwardVector = new THREE.Vector3(0, 0, 1);
+                forwardVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+                forwardVector.multiplyScalar(10); // Move 10 units
+                playerBoat.position.add(forwardVector);
+                console.log('Directly moved boat to:', playerBoat.position);
+            }
+        }
+        
+        // Directly update turning
+        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+            if (playerBoat) {
+                playerBoat.rotation.y += 0.1;
+                speedMeter.textContent = `TURNING LEFT: ${Math.round(playerBoat.rotation.y * 57.3)} degrees`;
+                speedMeter.style.color = 'blue';
+            }
+        }
+        
+        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+            if (playerBoat) {
+                playerBoat.rotation.y -= 0.1;
+                speedMeter.textContent = `TURNING RIGHT: ${Math.round(playerBoat.rotation.y * 57.3)} degrees`;
+                speedMeter.style.color = 'green';
+            }
         }
     });
     
@@ -458,124 +488,176 @@ function addRamps(trackPath) {
 
 // Update game state
 function update() {
-    const delta = clock.getDelta();
-    const speedMeter = document.getElementById('speed-meter');
+    try {
+        const delta = clock.getDelta();
+        const speedMeter = document.getElementById('speed-meter');
 
-    // Log current state
-    console.log('Update - Keys:', 
-        keys.forward ? 'Forward' : '', 
-        keys.backward ? 'Backward' : '', 
-        keys.left ? 'Left' : '', 
-        keys.right ? 'Right' : '',
-        'Speed:', Math.round(speed)
-    );
+        // Log current state
+        console.log('Update - Keys:', 
+            keys.forward ? 'Forward' : '', 
+            keys.backward ? 'Backward' : '', 
+            keys.left ? 'Left' : '', 
+            keys.right ? 'Right' : '',
+            'Speed:', Math.round(speed)
+        );
 
-    // More responsive boat physics
-    if (keys.forward) {
-        speed += ACCELERATION * delta;
-        console.log('Accelerating, new speed:', Math.round(speed));
-        // Direct update of HUD for testing
-        speedMeter.textContent = `FORWARD: ${Math.abs(Math.round(speed))} KPH`;
-        speedMeter.style.color = 'lime';
-    } else if (keys.backward) {
-        speed -= ACCELERATION * delta * 0.7; // Slower reverse speed
-        console.log('Braking, new speed:', Math.round(speed));
-        // Direct update of HUD for testing
-        speedMeter.textContent = `BACKWARD: ${Math.abs(Math.round(speed))} KPH`;
-        speedMeter.style.color = 'orange';
-    } else {
-        // Natural deceleration when no input
-        speed *= 0.95;
-        // Direct update of HUD for testing
-        speedMeter.textContent = `COASTING: ${Math.abs(Math.round(speed))} KPH`;
-    }
-
-    // Apply drag and speed limits
-    speed *= DRAG_COEFFICIENT;
-    speed = THREE.MathUtils.clamp(speed, -MAX_SPEED * 0.4, MAX_SPEED);
-
-    // Sharper turning when moving
-    const turnMultiplier = Math.abs(speed) / MAX_SPEED; // Turn better at higher speeds
-    if (keys.left) {
-        playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
-        console.log('Turning left, rotation:', playerBoat.rotation.y);
-        // Update HUD for turning
-        speedMeter.textContent += ' TURNING LEFT';
-    }
-    if (keys.right) {
-        playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
-        console.log('Turning right, rotation:', playerBoat.rotation.y);
-        // Update HUD for turning
-        speedMeter.textContent += ' TURNING RIGHT';
-    }
-
-    // Update velocity and position with better physics
-    velocity.set(0, 0, speed * delta);
-    velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
-    
-    // Add slight banking when turning
-    const bankAmount = (keys.left ? 1 : (keys.right ? -1 : 0)) * Math.abs(speed) / MAX_SPEED * 0.3;
-    playerBoat.rotation.z = bankAmount;
-    
-    // Store previous position for logging
-    const prevPosition = playerBoat.position.clone();
-    
-    // Update position
-    playerBoat.position.add(velocity);
-    
-    console.log('Boat moved from', 
-        prevPosition.x.toFixed(2), 
-        prevPosition.y.toFixed(2), 
-        prevPosition.z.toFixed(2), 
-        'to', 
-        playerBoat.position.x.toFixed(2), 
-        playerBoat.position.y.toFixed(2), 
-        playerBoat.position.z.toFixed(2)
-    );
-
-    // Keep boat above water with bobbing effect
-    const bobHeight = Math.sin(Date.now() * 0.003) * 0.5;
-    playerBoat.position.y = Math.max(5 + bobHeight, playerBoat.position.y);
-
-    // Camera follows boat more smoothly
-    controls.target.lerp(playerBoat.position, 0.1);
-    camera.position.lerp(
-        new THREE.Vector3(
-            playerBoat.position.x - Math.sin(playerBoat.rotation.y) * 200,
-            100,
-            playerBoat.position.z - Math.cos(playerBoat.rotation.y) * 200
-        ),
-        0.1
-    );
-    controls.update();
-
-    // Update UI
-    document.getElementById('speed-meter').textContent = `${Math.abs(Math.round(speed))} KPH`;
-
-    // Send position update to server
-    socket.emit('playerUpdate', {
-        position: playerBoat.position.toArray(),
-        rotation: playerBoat.rotation.toArray(),
-        speed: speed,
-        isDrifting: isDrifting
-    });
-
-    // Check if passed through checkpoint
-    const nextCheckpoint = checkpoints[currentCheckpoint];
-    const checkpointPos = nextCheckpoint.position;
-    const distanceToCheckpoint = new THREE.Vector2(
-        playerBoat.position.x - checkpointPos.x,
-        playerBoat.position.z - checkpointPos.z
-    ).length();
-
-    if (distanceToCheckpoint < TRACK_WIDTH/2) {
-        currentCheckpoint = (currentCheckpoint + 1) % checkpoints.length;
-        if (currentCheckpoint === 0) {
-            lapCount++;
-            console.log(`Lap ${lapCount} completed!`);
+        // More responsive boat physics
+        if (keys.forward) {
+            speed += ACCELERATION * delta;
+            console.log('Accelerating, new speed:', Math.round(speed));
+            // Direct update of HUD for testing
+            speedMeter.textContent = `FORWARD: ${Math.abs(Math.round(speed))} KPH`;
+            speedMeter.style.color = 'lime';
+        } else if (keys.backward) {
+            speed -= ACCELERATION * delta * 0.7; // Slower reverse speed
+            console.log('Braking, new speed:', Math.round(speed));
+            // Direct update of HUD for testing
+            speedMeter.textContent = `BACKWARD: ${Math.abs(Math.round(speed))} KPH`;
+            speedMeter.style.color = 'orange';
+        } else {
+            // Natural deceleration when no input
+            speed *= 0.95;
+            // Direct update of HUD for testing
+            speedMeter.textContent = `COASTING: ${Math.abs(Math.round(speed))} KPH`;
         }
+
+        // Apply drag and speed limits
+        speed *= DRAG_COEFFICIENT;
+        speed = THREE.MathUtils.clamp(speed, -MAX_SPEED * 0.4, MAX_SPEED);
+
+        // Sharper turning when moving
+        const turnMultiplier = Math.abs(speed) / MAX_SPEED; // Turn better at higher speeds
+        if (keys.left) {
+            playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
+            console.log('Turning left, rotation:', playerBoat.rotation.y);
+            // Update HUD for turning
+            speedMeter.textContent += ' TURNING LEFT';
+        }
+        if (keys.right) {
+            playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
+            console.log('Turning right, rotation:', playerBoat.rotation.y);
+            // Update HUD for turning
+            speedMeter.textContent += ' TURNING RIGHT';
+        }
+
+        // Update velocity and position with better physics
+        velocity.set(0, 0, speed * delta);
+        velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        
+        // Add slight banking when turning
+        const bankAmount = (keys.left ? 1 : (keys.right ? -1 : 0)) * Math.abs(speed) / MAX_SPEED * 0.3;
+        playerBoat.rotation.z = bankAmount;
+        
+        // Store previous position for logging
+        const prevPosition = playerBoat.position.clone();
+        
+        // Update position
+        playerBoat.position.add(velocity);
+        
+        console.log('Boat moved from', 
+            prevPosition.x.toFixed(2), 
+            prevPosition.y.toFixed(2), 
+            prevPosition.z.toFixed(2), 
+            'to', 
+            playerBoat.position.x.toFixed(2), 
+            playerBoat.position.y.toFixed(2), 
+            playerBoat.position.z.toFixed(2)
+        );
+
+        // Keep boat above water with bobbing effect
+        const bobHeight = Math.sin(Date.now() * 0.003) * 0.5;
+        playerBoat.position.y = Math.max(5 + bobHeight, playerBoat.position.y);
+
+        // Camera follows boat more smoothly
+        controls.target.lerp(playerBoat.position, 0.1);
+        camera.position.lerp(
+            new THREE.Vector3(
+                playerBoat.position.x - Math.sin(playerBoat.rotation.y) * 200,
+                100,
+                playerBoat.position.z - Math.cos(playerBoat.rotation.y) * 200
+            ),
+            0.1
+        );
+        controls.update();
+
+        // Update UI
+        document.getElementById('speed-meter').textContent = `${Math.abs(Math.round(speed))} KPH`;
+
+        // Send position update to server
+        socket.emit('playerUpdate', {
+            position: playerBoat.position.toArray(),
+            rotation: playerBoat.rotation.toArray(),
+            speed: speed,
+            isDrifting: isDrifting
+        });
+
+        // Check if passed through checkpoint
+        if (checkpoints.length > 0 && currentCheckpoint < checkpoints.length) {
+            const nextCheckpoint = checkpoints[currentCheckpoint];
+            if (nextCheckpoint) {
+                const checkpointPos = nextCheckpoint.position;
+                const distanceToCheckpoint = new THREE.Vector2(
+                    playerBoat.position.x - checkpointPos.x,
+                    playerBoat.position.z - checkpointPos.z
+                ).length();
+
+                if (distanceToCheckpoint < TRACK_WIDTH/2) {
+                    currentCheckpoint = (currentCheckpoint + 1) % checkpoints.length;
+                    if (currentCheckpoint === 0) {
+                        lapCount++;
+                        console.log(`Lap ${lapCount} completed!`);
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error('Error in update function:', error);
     }
 }
+
+// Add a manual update button to the UI
+function addManualUpdateButton() {
+    const updateButton = document.createElement('button');
+    updateButton.id = 'manual-update';
+    updateButton.textContent = 'MANUAL UPDATE';
+    updateButton.style.position = 'absolute';
+    updateButton.style.top = '70px';
+    updateButton.style.left = '10px';
+    updateButton.style.zIndex = '1000';
+    updateButton.style.padding = '5px';
+    updateButton.style.backgroundColor = '#ff0000';
+    updateButton.style.color = 'white';
+    updateButton.style.border = 'none';
+    updateButton.style.borderRadius = '5px';
+    updateButton.style.cursor = 'pointer';
+    
+    updateButton.addEventListener('click', function() {
+        console.log('Manual update button clicked');
+        
+        // Force boat to move forward
+        if (playerBoat) {
+            speed = 500;
+            const forwardVector = new THREE.Vector3(0, 0, 1);
+            forwardVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+            forwardVector.multiplyScalar(10); // Move 10 units
+            playerBoat.position.add(forwardVector);
+            
+            // Update HUD
+            const speedMeter = document.getElementById('speed-meter');
+            speedMeter.textContent = `MANUAL: ${Math.round(speed)} KPH`;
+            speedMeter.style.color = 'purple';
+            
+            console.log('Manually moved boat to:', playerBoat.position);
+        }
+    });
+    
+    document.body.appendChild(updateButton);
+}
+
+// Call this after DOM is loaded
+document.addEventListener('DOMContentLoaded', function() {
+    addManualUpdateButton();
+});
 
 // Multiplayer event handlers
 socket.on('playersList', (players) => {
