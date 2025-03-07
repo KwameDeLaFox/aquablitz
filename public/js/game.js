@@ -1,3 +1,6 @@
+// Log that the game.js file is loaded
+console.log('Aqua Blitz game.js loaded at', new Date().toISOString());
+
 import * as THREE from 'three';
 import { Water } from 'three/addons/objects/Water.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
