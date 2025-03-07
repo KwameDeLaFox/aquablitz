@@ -5,7 +5,12 @@ const io = require('socket.io')(http);
 const path = require('path');
 
 // Serve static files from public directory
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve index.html for all routes (SPA style)
+app.get('*', (req, res) => {
+    res.sendFile(path.join(__dirname, 'public', 'index.html'));
+});
 
 // Game state
 const gameState = {
@@ -66,6 +71,7 @@ io.on('connection', (socket) => {
 
 // Start server
 const PORT = process.env.PORT || 3000;
+module.exports = http; // Export for Vercel
 http.listen(PORT, () => {
     console.log(`Aqua Blitz server running on port ${PORT}`);
 }); 
