@@ -1,6 +1,7 @@
 import * as THREE from 'three';
-import { Water } from 'three/addons/objects/Water2.js';
+import { Water } from 'three/addons/objects/Water.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { Sky } from 'three/addons/objects/Sky.js';
 
 // Constants for game physics
 const ACCELERATION = 800; // Units per second^2
@@ -10,6 +11,12 @@ const DRIFT_FACTOR = 1.5; // Multiplier for turn speed while drifting
 const DRAG_COEFFICIENT = 0.95; // Air/water resistance (lower = more drag)
 const NITRO_MULTIPLIER = 1.8; // Speed boost from nitro
 const WATER_LEVEL = 0; // Y position of water surface
+
+// Add these constants for water
+const WATER_NORMAL_SCALE = 4;
+const WATER_DISTORTION_SCALE = 3.7;
+const WATER_ALPHA = 1.0;
+const WATER_SIZE = 10000;
 
 // Game state
 let playerBoat;
@@ -56,17 +63,49 @@ function init() {
     scene.add(sunLight);
 
     // Water
-    const waterGeometry = new THREE.PlaneGeometry(10000, 10000);
+    const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE);
+    const textureLoader = new THREE.TextureLoader();
+    
+    const waterNormals = textureLoader.load('textures/waternormals.jpg');
+    waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+    
     water = new Water(waterGeometry, {
-        color: 0x0088ff,
-        scale: 1,
-        flowDirection: new THREE.Vector2(1, 1),
-        textureWidth: 1024,
-        textureHeight: 1024
+        textureWidth: 512,
+        textureHeight: 512,
+        waterNormals: waterNormals,
+        sunDirection: new THREE.Vector3(),
+        sunColor: 0xffffff,
+        waterColor: 0x001e0f,
+        distortionScale: WATER_DISTORTION_SCALE,
+        fog: scene.fog !== undefined
     });
+    
     water.rotation.x = -Math.PI / 2;
     water.position.y = WATER_LEVEL;
     scene.add(water);
+
+    // Add sky
+    const sky = new Sky();
+    sky.scale.setScalar(10000);
+    scene.add(sky);
+
+    const skyUniforms = sky.material.uniforms;
+    skyUniforms['turbidity'].value = 10;
+    skyUniforms['rayleigh'].value = 2;
+    skyUniforms['mieCoefficient'].value = 0.005;
+    skyUniforms['mieDirectionalG'].value = 0.8;
+
+    const sun = new THREE.Vector3();
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+
+    const phi = THREE.MathUtils.degToRad(88);
+    const theta = THREE.MathUtils.degToRad(180);
+    sun.setFromSphericalCoords(1, phi, theta);
+
+    sky.material.uniforms['sunPosition'].value.copy(sun);
+    water.material.uniforms['sunDirection'].value.copy(sun).normalize();
+
+    scene.environment = pmremGenerator.fromScene(sky).texture;
 
     // Temporary boat (box for now)
     const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
@@ -287,6 +326,10 @@ socket.on('powerUpEffect', (data) => {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
+    
+    // Update water
+    water.material.uniforms['time'].value += 1.0 / 60.0;
+    
     update();
     renderer.render(scene, camera);
 }
