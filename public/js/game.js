@@ -59,16 +59,34 @@ const otherPlayers = new Map();
 
 // Wait for DOM to load
 document.addEventListener('DOMContentLoaded', () => {
+    console.log('DOM content loaded');
+    
     // Set up start button listener
     const startBtn = document.getElementById('start-btn');
     const lobby = document.getElementById('lobby');
     
+    if (!startBtn) {
+        console.error('Start button not found!');
+        return;
+    }
+    
+    console.log('Start button found, adding click listener');
+    
     startBtn.addEventListener('click', () => {
+        console.log('Start button clicked');
         isGameStarted = true;
         lobby.classList.add('hidden');
-        init();
-        animate();
         
+        // Initialize the game
+        console.log('Initializing game...');
+        init();
+        
+        // Start animation loop if not already started
+        console.log('Starting animation loop...');
+        requestAnimationFrame(animate);
+        
+        // Join multiplayer session
+        console.log('Joining multiplayer session...');
         socket.emit('playerJoin', {
             position: playerBoat.position.toArray(),
             rotation: playerBoat.rotation.toArray()
@@ -229,36 +247,44 @@ const keys = {
 };
 
 function onKeyDown(event) {
+    console.log('Key down:', event.code);
     event.preventDefault(); // Prevent default browser actions
     switch(event.code) {
         case 'KeyW':
         case 'ArrowUp':
             keys.forward = true;
+            console.log('Forward key pressed');
             break;
         case 'KeyS':
         case 'ArrowDown':
             keys.backward = true;
+            console.log('Backward key pressed');
             break;
         case 'KeyA':
         case 'ArrowLeft':
             keys.left = true;
+            console.log('Left key pressed');
             break;
         case 'KeyD':
         case 'ArrowRight':
             keys.right = true;
+            console.log('Right key pressed');
             break;
         case 'ShiftLeft':
         case 'ShiftRight':
             keys.drift = true;
             isDrifting = true;
+            console.log('Drift key pressed');
             break;
         case 'Space':
             if (hasPowerUp) usePowerUp();
+            console.log('Power-up key pressed');
             break;
     }
 }
 
 function onKeyUp(event) {
+    console.log('Key up:', event.code);
     switch(event.code) {
         case 'KeyW':
         case 'ArrowUp':
@@ -421,11 +447,22 @@ function addRamps(trackPath) {
 function update() {
     const delta = clock.getDelta();
 
+    // Log current state
+    console.log('Update - Keys:', 
+        keys.forward ? 'Forward' : '', 
+        keys.backward ? 'Backward' : '', 
+        keys.left ? 'Left' : '', 
+        keys.right ? 'Right' : '',
+        'Speed:', Math.round(speed)
+    );
+
     // More responsive boat physics
     if (keys.forward) {
         speed += ACCELERATION * delta;
+        console.log('Accelerating, new speed:', Math.round(speed));
     } else if (keys.backward) {
         speed -= ACCELERATION * delta * 0.7; // Slower reverse speed
+        console.log('Braking, new speed:', Math.round(speed));
     } else {
         // Natural deceleration when no input
         speed *= 0.95;
@@ -439,9 +476,11 @@ function update() {
     const turnMultiplier = Math.abs(speed) / MAX_SPEED; // Turn better at higher speeds
     if (keys.left) {
         playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
+        console.log('Turning left, rotation:', playerBoat.rotation.y);
     }
     if (keys.right) {
         playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
+        console.log('Turning right, rotation:', playerBoat.rotation.y);
     }
 
     // Update velocity and position with better physics
@@ -452,7 +491,21 @@ function update() {
     const bankAmount = (keys.left ? 1 : (keys.right ? -1 : 0)) * Math.abs(speed) / MAX_SPEED * 0.3;
     playerBoat.rotation.z = bankAmount;
     
+    // Store previous position for logging
+    const prevPosition = playerBoat.position.clone();
+    
+    // Update position
     playerBoat.position.add(velocity);
+    
+    console.log('Boat moved from', 
+        prevPosition.x.toFixed(2), 
+        prevPosition.y.toFixed(2), 
+        prevPosition.z.toFixed(2), 
+        'to', 
+        playerBoat.position.x.toFixed(2), 
+        playerBoat.position.y.toFixed(2), 
+        playerBoat.position.z.toFixed(2)
+    );
 
     // Keep boat above water with bobbing effect
     const bobHeight = Math.sin(Date.now() * 0.003) * 0.5;
