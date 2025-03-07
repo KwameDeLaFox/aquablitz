@@ -5,6 +5,7 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
+    "build": "mkdir -p public/js && cp -r node_modules/three/build/three.module.js public/js/ && cp -r node_modules/three/examples/jsm public/js/",
     "dev": "nodemon server.js"
   },
   "dependencies": {
@@ -14,5 +15,8 @@
   },
   "devDependencies": {
     "nodemon": "^3.0.3"
+  },
+  "engines": {
+    "node": ">=18.0.0"
   }
 } 

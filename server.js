@@ -4,8 +4,24 @@ const http = require('http').createServer(app);
 const io = require('socket.io')(http);
 const path = require('path');
 
+// Set proper MIME types
+app.use((req, res, next) => {
+    if (req.url.endsWith('.js')) {
+        res.type('application/javascript');
+    } else if (req.url.endsWith('.mjs') || req.url.endsWith('module.js')) {
+        res.type('application/javascript; charset=utf-8');
+    }
+    next();
+});
+
 // Serve static files from public directory
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+    setHeaders: (res, path) => {
+        if (path.endsWith('.js')) {
+            res.set('Content-Type', 'application/javascript');
+        }
+    }
+}));
 
 // Serve index.html for all routes (SPA style)
 app.get('*', (req, res) => {
