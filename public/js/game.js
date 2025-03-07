@@ -114,16 +114,51 @@ function init() {
         directionalLight.position.set(100, 100, 100);
         scene.add(directionalLight);
 
-        // Add temporary ground plane for visibility
-        const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
-        const groundMaterial = new THREE.MeshStandardMaterial({ 
-            color: 0x006622,
-            roughness: 0.8,
-            metalness: 0.2
+        // Initialize water
+        const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE);
+        const textureLoader = new THREE.TextureLoader();
+        
+        water = new Water(waterGeometry, {
+            textureWidth: 512,
+            textureHeight: 512,
+            waterNormals: textureLoader.load('textures/waternormals.jpg', function(texture) {
+                texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+                texture.repeat.set(4, 4);
+            }),
+            sunDirection: new THREE.Vector3(0.5, 0.5, 0),
+            sunColor: 0xffffff,
+            waterColor: 0x001e0f,
+            distortionScale: WATER_DISTORTION_SCALE,
+            fog: scene.fog !== undefined
         });
-        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
-        ground.rotation.x = -Math.PI / 2;
-        scene.add(ground);
+        
+        water.rotation.x = -Math.PI / 2;
+        water.position.y = WATER_LEVEL;
+        scene.add(water);
+
+        // Add sky
+        const sky = new Sky();
+        sky.scale.setScalar(10000);
+        scene.add(sky);
+
+        const skyUniforms = sky.material.uniforms;
+        skyUniforms['turbidity'].value = 10;
+        skyUniforms['rayleigh'].value = 2;
+        skyUniforms['mieCoefficient'].value = 0.005;
+        skyUniforms['mieDirectionalG'].value = 0.8;
+
+        const sun = new THREE.Vector3();
+        const pmremGenerator = new THREE.PMREMGenerator(renderer);
+
+        const phi = THREE.MathUtils.degToRad(60);
+        const theta = THREE.MathUtils.degToRad(180);
+        sun.setFromSphericalCoords(1, phi, theta);
+
+        sky.material.uniforms['sunPosition'].value.copy(sun);
+        water.material.uniforms['sunDirection'].value.copy(sun).normalize();
+
+        scene.environment = pmremGenerator.fromScene(sky).texture;
+        pmremGenerator.dispose();
 
         // Add temporary player boat
         const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
@@ -132,10 +167,17 @@ function init() {
         playerBoat.position.y = 5;
         scene.add(playerBoat);
 
+        // Create the track
+        createNeonLagoonTrack();
+
         // Add OrbitControls for debugging
         controls = new OrbitControls(camera, renderer.domElement);
         controls.enableDamping = true;
         controls.dampingFactor = 0.05;
+        
+        // Add keyboard event listeners
+        document.addEventListener('keydown', onKeyDown);
+        document.addEventListener('keyup', onKeyUp);
         
         // Handle window resize
         window.addEventListener('resize', onWindowResize, false);
@@ -613,10 +655,18 @@ socket.on('powerUpEffect', (data) => {
 // Animation loop
 function animate() {
     requestAnimationFrame(animate);
+    
+    if (!isGameStarted) return;
+    
     const delta = clock.getDelta();
     
+    // Update controls
+    controls.update();
+    
     // Animate water
-    water.material.uniforms['time'].value += delta * WAVE_SPEED;
+    if (water && water.material.uniforms) {
+        water.material.uniforms['time'].value += delta * WAVE_SPEED;
+    }
     
     // Animate boost pads
     boostPads.forEach(pad => {
