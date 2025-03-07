@@ -42,6 +42,7 @@ let velocity = new THREE.Vector3();
 let isDrifting = false;
 let hasPowerUp = false;
 let powerUpType = null;
+let isGameStarted = false;
 
 // Track state
 let trackPoints = [];
@@ -63,143 +64,88 @@ const socket = io({
 });
 const otherPlayers = new Map();
 
+// Wait for DOM to load
+document.addEventListener('DOMContentLoaded', () => {
+    // Set up start button listener
+    const startBtn = document.getElementById('start-btn');
+    const lobby = document.getElementById('lobby');
+    
+    startBtn.addEventListener('click', () => {
+        isGameStarted = true;
+        lobby.classList.add('hidden');
+        init();
+        animate();
+    });
+});
+
 // Initialize Three.js scene
 function init() {
-    // Scene setup
-    scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x001133); // Darker background
-    scene.fog = new THREE.Fog(0x001133, 1000, 4000);
+    try {
+        // Create clock
+        clock = new THREE.Clock();
+        
+        // Scene setup with error handling
+        scene = new THREE.Scene();
+        scene.background = new THREE.Color(0x001133);
+        scene.fog = new THREE.Fog(0x001133, 1000, 4000);
 
-    // Camera
-    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
-    camera.position.set(0, 100, -200); // Higher and further back
-    camera.lookAt(0, 0, 0);
+        // Camera
+        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
+        camera.position.set(0, 100, -200);
+        camera.lookAt(0, 0, 0);
 
-    // Renderer
-    renderer = new THREE.WebGLRenderer({ antialias: true });
-    renderer.setPixelRatio(window.devicePixelRatio);
-    renderer.setSize(window.innerWidth, window.innerHeight);
-    renderer.toneMapping = THREE.ACESFilmicToneMapping;
-    renderer.toneMappingExposure = 0.5; // Reduce overall brightness
-    document.body.appendChild(renderer.domElement);
-
-    // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Reduced ambient light
-    scene.add(ambientLight);
-    
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-    sunLight.position.set(100, 100, 100);
-    sunLight.castShadow = true;
-    scene.add(sunLight);
-
-    // Add point lights for the track
-    const pointLight1 = new THREE.PointLight(0x00ff88, 1, 1000);
-    pointLight1.position.set(0, 50, 0);
-    scene.add(pointLight1);
-
-    const pointLight2 = new THREE.PointLight(0x0088ff, 1, 1000);
-    pointLight2.position.set(400, 50, -400);
-    scene.add(pointLight2);
-
-    // Water
-    const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 512, 512);
-    const textureLoader = new THREE.TextureLoader();
-    
-    const waterNormals = textureLoader.load('textures/waternormals.jpg', function(texture) {
-        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-        texture.repeat.set(6, 6);
-    });
-    
-    water = new Water(waterGeometry, {
-        textureWidth: 512,
-        textureHeight: 512,
-        waterNormals: waterNormals,
-        sunDirection: new THREE.Vector3(0.5, 0.5, 0),
-        sunColor: 0xffffff,
-        waterColor: 0x001e0f,
-        distortionScale: WATER_DISTORTION_SCALE,
-        fog: scene.fog !== undefined
-    });
-    
-    water.rotation.x = -Math.PI / 2;
-    water.position.y = WATER_LEVEL;
-    scene.add(water);
-
-    // Add sky
-    const sky = new Sky();
-    sky.scale.setScalar(10000);
-    scene.add(sky);
-
-    const skyUniforms = sky.material.uniforms;
-    skyUniforms['turbidity'].value = 10;
-    skyUniforms['rayleigh'].value = 2;
-    skyUniforms['mieCoefficient'].value = 0.005;
-    skyUniforms['mieDirectionalG'].value = 0.8;
-
-    const sun = new THREE.Vector3();
-    const pmremGenerator = new THREE.PMREMGenerator(renderer);
-
-    const phi = THREE.MathUtils.degToRad(60);
-    const theta = THREE.MathUtils.degToRad(180);
-    sun.setFromSphericalCoords(1, phi, theta);
-
-    sky.material.uniforms['sunPosition'].value.copy(sun);
-    water.material.uniforms['sunDirection'].value.copy(sun).normalize();
-
-    scene.environment = pmremGenerator.fromScene(sky).texture;
-    pmremGenerator.dispose();
-
-    // Temporary boat (box for now)
-    const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
-    const boatMaterial = new THREE.MeshPhongMaterial({ color: 0xff0000 });
-    playerBoat = new THREE.Mesh(boatGeometry, boatMaterial);
-    playerBoat.position.set(0, 5, 0);
-    scene.add(playerBoat);
-
-    // Create the Neon Surge track
-    createNeonLagoonTrack();
-
-    // Update initial boat position
-    playerBoat.position.set(0, 5, 0);
-
-    // Controls
-    controls = new OrbitControls(camera, renderer.domElement);
-    controls.enablePan = false;
-    controls.maxPolarAngle = Math.PI * 0.495;
-    controls.minDistance = 100;
-    controls.maxDistance = 1000;
-    controls.target.copy(playerBoat.position);
-    controls.update();
-
-    // Clock for frame-independent movement
-    clock = new THREE.Clock();
-
-    // Event listeners
-    window.addEventListener('resize', onWindowResize);
-    document.addEventListener('keydown', onKeyDown);
-    document.addEventListener('keyup', onKeyUp);
-
-    // Start button
-    document.getElementById('start-btn').addEventListener('click', () => {
-        document.getElementById('lobby').classList.add('hidden');
-        socket.emit('playerJoin', {
-            position: playerBoat.position.toArray(),
-            rotation: playerBoat.rotation.toArray()
+        // Renderer
+        renderer = new THREE.WebGLRenderer({ 
+            antialias: true,
+            alpha: true,
+            powerPreference: "high-performance"
         });
-    });
+        renderer.setPixelRatio(window.devicePixelRatio);
+        renderer.setSize(window.innerWidth, window.innerHeight);
+        renderer.toneMapping = THREE.ACESFilmicToneMapping;
+        renderer.toneMappingExposure = 0.5;
+        document.body.appendChild(renderer.domElement);
+
+        // Basic lighting
+        const ambientLight = new THREE.AmbientLight(0xffffff, 0.5);
+        scene.add(ambientLight);
+        
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 1.0);
+        directionalLight.position.set(100, 100, 100);
+        scene.add(directionalLight);
+
+        // Add temporary ground plane for visibility
+        const groundGeometry = new THREE.PlaneGeometry(1000, 1000);
+        const groundMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x006622,
+            roughness: 0.8,
+            metalness: 0.2
+        });
+        const ground = new THREE.Mesh(groundGeometry, groundMaterial);
+        ground.rotation.x = -Math.PI / 2;
+        scene.add(ground);
+
+        // Add temporary player boat
+        const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
+        const boatMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff88 });
+        playerBoat = new THREE.Mesh(boatGeometry, boatMaterial);
+        playerBoat.position.y = 5;
+        scene.add(playerBoat);
+
+        // Add OrbitControls for debugging
+        controls = new OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        
+        // Handle window resize
+        window.addEventListener('resize', onWindowResize, false);
+        
+        console.log('Three.js scene initialized successfully');
+    } catch (error) {
+        console.error('Error initializing Three.js scene:', error);
+    }
 }
 
-// Create the giant ramp for the "Oh Hell Yeah" moment
-function createGiantRamp() {
-    const rampGeometry = new THREE.BoxGeometry(100, 80, 200);
-    const rampMaterial = new THREE.MeshPhongMaterial({ color: 0x666666 });
-    const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
-    ramp.position.set(0, 40, 500); // Place the ramp ahead of start
-    ramp.rotation.x = -Math.PI / 6; // Angle the ramp up
-    scene.add(ramp);
-}
-
-// Handle window resizing
 function onWindowResize() {
     camera.aspect = window.innerWidth / window.innerHeight;
     camera.updateProjectionMatrix();

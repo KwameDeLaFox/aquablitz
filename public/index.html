@@ -33,6 +33,7 @@
             border-radius: 10px;
             color: white;
             text-align: center;
+            z-index: 1000;
         }
         #lobby.hidden { display: none; }
         button {
@@ -81,14 +82,15 @@
 
     <script src="/socket.io/socket.io.js"></script>
     <script type="importmap">
-        {
-            "imports": {
-                "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
-                "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/",
-                "three/addons/objects/Water.js": "https://unpkg.com/three@0.162.0/examples/jsm/objects/Water.js",
-                "three/addons/objects/Sky.js": "https://unpkg.com/three@0.162.0/examples/jsm/objects/Sky.js"
-            }
+    {
+        "imports": {
+            "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+            "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/",
+            "three/addons/controls/OrbitControls.js": "https://unpkg.com/three@0.162.0/examples/jsm/controls/OrbitControls.js",
+            "three/addons/objects/Water.js": "https://unpkg.com/three@0.162.0/examples/jsm/objects/Water.js",
+            "three/addons/objects/Sky.js": "https://unpkg.com/three@0.162.0/examples/jsm/objects/Sky.js"
         }
+    }
     </script>
     <script type="module" src="js/game.js"></script>
 </body>
