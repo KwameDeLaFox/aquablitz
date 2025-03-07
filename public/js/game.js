@@ -64,6 +64,7 @@ document.addEventListener('DOMContentLoaded', () => {
     // Set up start button listener
     const startBtn = document.getElementById('start-btn');
     const lobby = document.getElementById('lobby');
+    const speedMeter = document.getElementById('speed-meter');
     
     if (!startBtn) {
         console.error('Start button not found!');
@@ -71,6 +72,16 @@ document.addEventListener('DOMContentLoaded', () => {
     }
     
     console.log('Start button found, adding click listener');
+    
+    // Add a direct keyboard test
+    window.addEventListener('keydown', function(e) {
+        console.log('Direct keydown test:', e.key);
+        // Update the HUD directly to test
+        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
+            speedMeter.textContent = 'UP KEY PRESSED!';
+            speedMeter.style.color = 'red';
+        }
+    });
     
     startBtn.addEventListener('click', () => {
         console.log('Start button clicked');
@@ -210,8 +221,6 @@ function init() {
 
         // Event listeners
         window.addEventListener('resize', onWindowResize);
-        document.addEventListener('keydown', onKeyDown);
-        document.addEventListener('keyup', onKeyUp);
         
         console.log('Scene initialized successfully');
     } catch (error) {
@@ -236,7 +245,7 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Input handling
+// Keyboard controls
 const keys = {
     forward: false,
     backward: false,
@@ -246,69 +255,73 @@ const keys = {
     powerUp: false
 };
 
-function onKeyDown(event) {
-    console.log('Key down:', event.code);
-    event.preventDefault(); // Prevent default browser actions
-    switch(event.code) {
-        case 'KeyW':
+// Set up keyboard event listeners
+window.addEventListener('keydown', function(event) {
+    console.log('Global keydown:', event.key);
+    switch(event.key) {
+        case 'w':
+        case 'W':
         case 'ArrowUp':
             keys.forward = true;
-            console.log('Forward key pressed');
             break;
-        case 'KeyS':
+        case 's':
+        case 'S':
         case 'ArrowDown':
             keys.backward = true;
-            console.log('Backward key pressed');
             break;
-        case 'KeyA':
+        case 'a':
+        case 'A':
         case 'ArrowLeft':
             keys.left = true;
-            console.log('Left key pressed');
             break;
-        case 'KeyD':
+        case 'd':
+        case 'D':
         case 'ArrowRight':
             keys.right = true;
-            console.log('Right key pressed');
             break;
-        case 'ShiftLeft':
-        case 'ShiftRight':
+        case 'Shift':
             keys.drift = true;
             isDrifting = true;
-            console.log('Drift key pressed');
             break;
-        case 'Space':
-            if (hasPowerUp) usePowerUp();
-            console.log('Power-up key pressed');
+        case ' ':
+            keys.powerUp = true;
             break;
     }
-}
+});
 
-function onKeyUp(event) {
-    console.log('Key up:', event.code);
-    switch(event.code) {
-        case 'KeyW':
+window.addEventListener('keyup', function(event) {
+    console.log('Global keyup:', event.key);
+    switch(event.key) {
+        case 'w':
+        case 'W':
         case 'ArrowUp':
             keys.forward = false;
             break;
-        case 'KeyS':
+        case 's':
+        case 'S':
         case 'ArrowDown':
             keys.backward = false;
             break;
-        case 'KeyA':
+        case 'a':
+        case 'A':
         case 'ArrowLeft':
             keys.left = false;
             break;
-        case 'KeyD':
+        case 'd':
+        case 'D':
         case 'ArrowRight':
             keys.right = false;
             break;
-        case 'ShiftLeft':
-        case 'ShiftRight':
+        case 'Shift':
             keys.drift = false;
             isDrifting = false;
             break;
+        case ' ':
+            keys.powerUp = false;
+            if (hasPowerUp) usePowerUp();
+            break;
     }
-}
+});
 
 // Power-up logic
 function usePowerUp() {
@@ -446,6 +459,7 @@ function addRamps(trackPath) {
 // Update game state
 function update() {
     const delta = clock.getDelta();
+    const speedMeter = document.getElementById('speed-meter');
 
     // Log current state
     console.log('Update - Keys:', 
@@ -460,12 +474,20 @@ function update() {
     if (keys.forward) {
         speed += ACCELERATION * delta;
         console.log('Accelerating, new speed:', Math.round(speed));
+        // Direct update of HUD for testing
+        speedMeter.textContent = `FORWARD: ${Math.abs(Math.round(speed))} KPH`;
+        speedMeter.style.color = 'lime';
     } else if (keys.backward) {
         speed -= ACCELERATION * delta * 0.7; // Slower reverse speed
         console.log('Braking, new speed:', Math.round(speed));
+        // Direct update of HUD for testing
+        speedMeter.textContent = `BACKWARD: ${Math.abs(Math.round(speed))} KPH`;
+        speedMeter.style.color = 'orange';
     } else {
         // Natural deceleration when no input
         speed *= 0.95;
+        // Direct update of HUD for testing
+        speedMeter.textContent = `COASTING: ${Math.abs(Math.round(speed))} KPH`;
     }
 
     // Apply drag and speed limits
@@ -477,10 +499,14 @@ function update() {
     if (keys.left) {
         playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
         console.log('Turning left, rotation:', playerBoat.rotation.y);
+        // Update HUD for turning
+        speedMeter.textContent += ' TURNING LEFT';
     }
     if (keys.right) {
         playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
         console.log('Turning right, rotation:', playerBoat.rotation.y);
+        // Update HUD for turning
+        speedMeter.textContent += ' TURNING RIGHT';
     }
 
     // Update velocity and position with better physics
@@ -593,9 +619,39 @@ socket.on('powerUpEffect', (data) => {
 function animate() {
     requestAnimationFrame(animate);
     
-    if (!isGameStarted) return;
+    // Update a counter in the UI to show the animation loop is running
+    const frameCounter = document.createElement('div');
+    frameCounter.id = 'frame-counter';
+    frameCounter.style.position = 'absolute';
+    frameCounter.style.top = '40px';
+    frameCounter.style.left = '10px';
+    frameCounter.style.color = 'yellow';
+    frameCounter.style.fontFamily = 'monospace';
+    
+    if (!document.getElementById('frame-counter')) {
+        document.body.appendChild(frameCounter);
+    }
+    
+    const counter = document.getElementById('frame-counter');
+    if (counter) {
+        counter.textContent = `Frame: ${Date.now()}`;
+    }
+    
+    if (!isGameStarted) {
+        console.log('Game not started yet, waiting...');
+        return;
+    }
     
     try {
+        // Log the current state of the keys
+        console.log('Keys state:', 
+            keys.forward ? 'Forward ' : '', 
+            keys.backward ? 'Backward ' : '', 
+            keys.left ? 'Left ' : '', 
+            keys.right ? 'Right ' : '',
+            keys.drift ? 'Drift ' : ''
+        );
+        
         const delta = clock.getDelta();
         
         // Update water
@@ -610,7 +666,10 @@ function animate() {
             water.material.uniforms['distortionScale'].value = WATER_DISTORTION_SCALE;
         }
         
+        // Update boat position and camera
         update();
+        
+        // Render the scene
         renderer.render(scene, camera);
     } catch (error) {
         console.error('Error in animation loop:', error);
@@ -618,4 +677,5 @@ function animate() {
 }
 
 // Start animation loop immediately (will wait for game start)
+console.log('Starting animation loop...');
 requestAnimationFrame(animate); 
