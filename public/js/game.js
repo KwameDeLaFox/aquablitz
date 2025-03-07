@@ -24,7 +24,10 @@ let hasPowerUp = false;
 let powerUpType = null;
 
 // Multiplayer
-const socket = io();
+const socket = io({
+    transports: ['websocket'],
+    path: '/socket.io'
+});
 const otherPlayers = new Map();
 
 // Initialize Three.js scene
