@@ -57,46 +57,58 @@ const otherPlayers = new Map();
 function init() {
     // Scene setup
     scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x88ccff);
-    scene.fog = new THREE.Fog(0x88ccff, 0, 5000);
+    scene.background = new THREE.Color(0x001133); // Darker background
+    scene.fog = new THREE.Fog(0x001133, 1000, 4000);
 
     // Camera
     camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
-    camera.position.set(0, 40, -100);
+    camera.position.set(0, 100, -200); // Higher and further back
+    camera.lookAt(0, 0, 0);
 
     // Renderer
     renderer = new THREE.WebGLRenderer({ antialias: true });
     renderer.setPixelRatio(window.devicePixelRatio);
     renderer.setSize(window.innerWidth, window.innerHeight);
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.5; // Reduce overall brightness
     document.body.appendChild(renderer.domElement);
 
     // Lighting
-    const ambientLight = new THREE.AmbientLight(0xffffff, 0.8);
+    const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Reduced ambient light
     scene.add(ambientLight);
-    const sunLight = new THREE.DirectionalLight(0xffffff, 1.5);
-    sunLight.position.set(0, 100, 0);
+    
+    const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
+    sunLight.position.set(100, 100, 100);
+    sunLight.castShadow = true;
     scene.add(sunLight);
+
+    // Add point lights for the track
+    const pointLight1 = new THREE.PointLight(0x00ff88, 1, 1000);
+    pointLight1.position.set(0, 50, 0);
+    scene.add(pointLight1);
+
+    const pointLight2 = new THREE.PointLight(0x0088ff, 1, 1000);
+    pointLight2.position.set(400, 50, -400);
+    scene.add(pointLight2);
 
     // Water
     const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 512, 512);
     const textureLoader = new THREE.TextureLoader();
     
-    const waterNormals = textureLoader.load('textures/waternormals.jpg');
-    waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
-    waterNormals.repeat.set(6, 6); // More wave repetition
+    const waterNormals = textureLoader.load('textures/waternormals.jpg', function(texture) {
+        texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+        texture.repeat.set(6, 6);
+    });
     
     water = new Water(waterGeometry, {
-        textureWidth: 1024,
-        textureHeight: 1024,
+        textureWidth: 512,
+        textureHeight: 512,
         waterNormals: waterNormals,
-        sunDirection: new THREE.Vector3(),
+        sunDirection: new THREE.Vector3(0.5, 0.5, 0),
         sunColor: 0xffffff,
-        waterColor: 0x0066cc, // Brighter blue
+        waterColor: 0x001e0f,
         distortionScale: WATER_DISTORTION_SCALE,
-        fog: scene.fog !== undefined,
-        alpha: WATER_ALPHA,
-        size: 4
+        fog: scene.fog !== undefined
     });
     
     water.rotation.x = -Math.PI / 2;
@@ -109,15 +121,15 @@ function init() {
     scene.add(sky);
 
     const skyUniforms = sky.material.uniforms;
-    skyUniforms['turbidity'].value = 8;
-    skyUniforms['rayleigh'].value = 1.5;
+    skyUniforms['turbidity'].value = 10;
+    skyUniforms['rayleigh'].value = 2;
     skyUniforms['mieCoefficient'].value = 0.005;
-    skyUniforms['mieDirectionalG'].value = 0.7;
+    skyUniforms['mieDirectionalG'].value = 0.8;
 
     const sun = new THREE.Vector3();
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
 
-    const phi = THREE.MathUtils.degToRad(88);
+    const phi = THREE.MathUtils.degToRad(60);
     const theta = THREE.MathUtils.degToRad(180);
     sun.setFromSphericalCoords(1, phi, theta);
 
@@ -125,6 +137,7 @@ function init() {
     water.material.uniforms['sunDirection'].value.copy(sun).normalize();
 
     scene.environment = pmremGenerator.fromScene(sky).texture;
+    pmremGenerator.dispose();
 
     // Temporary boat (box for now)
     const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
@@ -143,7 +156,9 @@ function init() {
     controls = new OrbitControls(camera, renderer.domElement);
     controls.enablePan = false;
     controls.maxPolarAngle = Math.PI * 0.495;
-    controls.target.set(0, 5, 0);
+    controls.minDistance = 100;
+    controls.maxDistance = 1000;
+    controls.target.copy(playerBoat.position);
     controls.update();
 
     // Clock for frame-independent movement
@@ -492,14 +507,18 @@ socket.on('powerUpEffect', (data) => {
 function animate() {
     requestAnimationFrame(animate);
     
+    const delta = clock.getDelta();
+    
     // Update water
     water.material.uniforms['time'].value += delta * WAVE_SPEED;
     
     // Make waves higher in the direction of boat movement
     if (Math.abs(speed) > 100) {
         const boatDir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
-        water.material.uniforms['distortionScale'].value += 
-            Math.abs(speed) / MAX_SPEED * boatDir.z * FOAM_FACTOR;
+        water.material.uniforms['distortionScale'].value = 
+            WATER_DISTORTION_SCALE + (Math.abs(speed) / MAX_SPEED * boatDir.z * FOAM_FACTOR);
+    } else {
+        water.material.uniforms['distortionScale'].value = WATER_DISTORTION_SCALE;
     }
     
     update();
