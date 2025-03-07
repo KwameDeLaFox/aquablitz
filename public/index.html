@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aqua Blitz - Multiplayer Boat Racing</title>
+    <style>
+        body { margin: 0; overflow: hidden; font-family: Arial, sans-serif; }
+        canvas { display: block; }
+        #ui-overlay {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
+            pointer-events: none;
+        }
+        #speed-meter {
+            font-size: 24px;
+            font-weight: bold;
+        }
+        #power-up {
+            margin-top: 10px;
+            font-size: 18px;
+        }
+        #lobby {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background: rgba(0, 0, 0, 0.8);
+            padding: 20px;
+            border-radius: 10px;
+            color: white;
+            text-align: center;
+        }
+        #lobby.hidden { display: none; }
+        button {
+            background: #00ff88;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 5px;
+            font-size: 18px;
+            cursor: pointer;
+            margin-top: 10px;
+        }
+        button:hover {
+            background: #00cc6a;
+        }
+        #controls {
+            position: absolute;
+            bottom: 10px;
+            left: 10px;
+            color: white;
+            text-shadow: 2px 2px 2px rgba(0,0,0,0.5);
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div id="ui-overlay">
+        <div id="speed-meter">0 KPH</div>
+        <div id="power-up">NO POWER-UP</div>
+    </div>
+
+    <div id="lobby">
+        <h1>AQUA BLITZ</h1>
+        <p>Fast-paced multiplayer boat racing!</p>
+        <button id="start-btn">JOIN RACE</button>
+        <p id="player-count">Players: 0/8</p>
+    </div>
+
+    <div id="controls">
+        <p>CONTROLS:</p>
+        <p>W/↑ - Accelerate</p>
+        <p>S/↓ - Brake</p>
+        <p>A/← D/→ - Turn</p>
+        <p>SHIFT - Drift</p>
+        <p>SPACE - Use Power-up</p>
+    </div>
+
+    <script src="/socket.io/socket.io.js"></script>
+    <script type="importmap">
+        {
+            "imports": {
+                "three": "https://unpkg.com/three@0.162.0/build/three.module.js",
+                "three/addons/": "https://unpkg.com/three@0.162.0/examples/jsm/"
+            }
+        }
+    </script>
+    <script type="module" src="js/game.js"></script>
+</body>
+</html> 
