@@ -22,6 +22,11 @@ const WATER_SIZE = 10000;
 const FOAM_FACTOR = 0.8;
 const WAVE_SPEED = 1.2;
 
+// Track constants
+const TRACK_WIDTH = 200;
+const BARRIER_HEIGHT = 30;
+const CHECKPOINT_COUNT = 8;
+
 // Game state
 let playerBoat;
 let camera, scene, renderer;
@@ -33,6 +38,13 @@ let velocity = new THREE.Vector3();
 let isDrifting = false;
 let hasPowerUp = false;
 let powerUpType = null;
+
+// Track state
+let trackPoints = [];
+let trackBarriers = [];
+let checkpoints = [];
+let currentCheckpoint = 0;
+let lapCount = 0;
 
 // Multiplayer
 const socket = io({
@@ -121,8 +133,11 @@ function init() {
     playerBoat.position.set(0, 5, 0);
     scene.add(playerBoat);
 
-    // Add a giant ramp
-    createGiantRamp();
+    // Create the Neon Lagoon track
+    createNeonLagoonTrack();
+
+    // Update initial boat position
+    playerBoat.position.set(0, 5, 0);
 
     // Controls
     controls = new OrbitControls(camera, renderer.domElement);
@@ -245,6 +260,125 @@ function usePowerUp() {
     document.getElementById('power-up').textContent = 'NO POWER-UP';
 }
 
+// Create the Neon Lagoon track
+function createNeonLagoonTrack() {
+    // Define track path points (x, z coordinates)
+    const trackPath = [
+        { x: 0, z: 0 },
+        { x: 300, z: 200 },
+        { x: 600, z: 0 },
+        { x: 800, z: -400 },
+        { x: 400, z: -800 },
+        { x: -200, z: -600 },
+        { x: -400, z: -200 },
+        { x: -200, z: 200 }
+    ];
+
+    trackPoints = trackPath;
+
+    // Create glowing barriers
+    const barrierMaterial = new THREE.MeshPhongMaterial({
+        color: 0x00ff88,
+        emissive: 0x00ff88,
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.8
+    });
+
+    // Create track barriers
+    for (let i = 0; i < trackPath.length; i++) {
+        const start = trackPath[i];
+        const end = trackPath[(i + 1) % trackPath.length];
+
+        // Calculate barrier positions
+        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z).normalize();
+        const normal = new THREE.Vector2(-direction.y, direction.x);
+        const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.z - start.z, 2));
+
+        // Create outer barriers
+        const barrierGeometry = new THREE.BoxGeometry(length, BARRIER_HEIGHT, 5);
+        const leftBarrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
+        const rightBarrier = new THREE.Mesh(barrierGeometry.clone(), barrierMaterial);
+
+        // Position barriers
+        const angle = Math.atan2(direction.y, direction.x);
+        const midX = (start.x + end.x) / 2;
+        const midZ = (start.z + end.z) / 2;
+
+        leftBarrier.position.set(
+            midX + normal.x * TRACK_WIDTH/2,
+            BARRIER_HEIGHT/2,
+            midZ + normal.y * TRACK_WIDTH/2
+        );
+        rightBarrier.position.set(
+            midX - normal.x * TRACK_WIDTH/2,
+            BARRIER_HEIGHT/2,
+            midZ - normal.y * TRACK_WIDTH/2
+        );
+
+        leftBarrier.rotation.y = angle;
+        rightBarrier.rotation.y = angle;
+
+        scene.add(leftBarrier);
+        scene.add(rightBarrier);
+        trackBarriers.push(leftBarrier, rightBarrier);
+    }
+
+    // Create checkpoints
+    const checkpointMaterial = new THREE.MeshPhongMaterial({
+        color: 0xff3366,
+        transparent: true,
+        opacity: 0.3
+    });
+
+    for (let i = 0; i < trackPath.length; i++) {
+        const start = trackPath[i];
+        const end = trackPath[(i + 1) % trackPath.length];
+        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z).normalize();
+        const midX = (start.x + end.x) / 2;
+        const midZ = (start.z + end.z) / 2;
+
+        const checkpointGeometry = new THREE.BoxGeometry(5, BARRIER_HEIGHT * 1.5, TRACK_WIDTH);
+        const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
+        
+        checkpoint.position.set(midX, BARRIER_HEIGHT/2, midZ);
+        checkpoint.rotation.y = Math.atan2(direction.y, direction.x);
+        
+        scene.add(checkpoint);
+        checkpoints.push(checkpoint);
+    }
+
+    // Add ramps at specific points
+    addRamps(trackPath);
+}
+
+// Add ramps to the track
+function addRamps(trackPath) {
+    const rampMaterial = new THREE.MeshPhongMaterial({
+        color: 0x3366ff,
+        emissive: 0x3366ff,
+        emissiveIntensity: 0.3
+    });
+
+    // Add ramps at specific track segments
+    const rampPositions = [2, 5]; // Indices of track segments to add ramps
+    
+    rampPositions.forEach(index => {
+        const start = trackPath[index];
+        const end = trackPath[(index + 1) % trackPath.length];
+        const midX = (start.x + end.x) / 2;
+        const midZ = (start.z + end.z) / 2;
+
+        const rampGeometry = new THREE.BoxGeometry(80, 40, TRACK_WIDTH * 0.8);
+        const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
+        
+        ramp.position.set(midX, 20, midZ);
+        ramp.rotation.x = -Math.PI / 8; // Angle the ramp up
+        
+        scene.add(ramp);
+    });
+}
+
 // Update game state
 function update() {
     const delta = clock.getDelta();
@@ -298,6 +432,22 @@ function update() {
         speed: speed,
         isDrifting: isDrifting
     });
+
+    // Check if passed through checkpoint
+    const nextCheckpoint = checkpoints[currentCheckpoint];
+    const checkpointPos = nextCheckpoint.position;
+    const distanceToCheckpoint = new THREE.Vector2(
+        playerBoat.position.x - checkpointPos.x,
+        playerBoat.position.z - checkpointPos.z
+    ).length();
+
+    if (distanceToCheckpoint < TRACK_WIDTH/2) {
+        currentCheckpoint = (currentCheckpoint + 1) % checkpoints.length;
+        if (currentCheckpoint === 0) {
+            lapCount++;
+            console.log(`Lap ${lapCount} completed!`);
+        }
+    }
 }
 
 // Multiplayer event handlers
