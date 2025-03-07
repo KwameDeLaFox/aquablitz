@@ -12,11 +12,15 @@ const DRAG_COEFFICIENT = 0.95; // Air/water resistance (lower = more drag)
 const NITRO_MULTIPLIER = 1.8; // Speed boost from nitro
 const WATER_LEVEL = 0; // Y position of water surface
 
-// Add these constants for water
-const WATER_NORMAL_SCALE = 4;
-const WATER_DISTORTION_SCALE = 3.7;
-const WATER_ALPHA = 1.0;
+// Update water constants
+const WATER_NORMAL_SCALE = 8; // Increased for more pronounced waves
+const WATER_DISTORTION_SCALE = 4.5; // More distortion
+const WATER_ALPHA = 0.8; // Slight transparency
 const WATER_SIZE = 10000;
+
+// Add these for foam effects
+const FOAM_FACTOR = 0.8;
+const WAVE_SPEED = 1.2;
 
 // Game state
 let playerBoat;
@@ -63,21 +67,24 @@ function init() {
     scene.add(sunLight);
 
     // Water
-    const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE);
+    const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 512, 512);
     const textureLoader = new THREE.TextureLoader();
     
     const waterNormals = textureLoader.load('textures/waternormals.jpg');
     waterNormals.wrapS = waterNormals.wrapT = THREE.RepeatWrapping;
+    waterNormals.repeat.set(6, 6); // More wave repetition
     
     water = new Water(waterGeometry, {
-        textureWidth: 512,
-        textureHeight: 512,
+        textureWidth: 1024,
+        textureHeight: 1024,
         waterNormals: waterNormals,
         sunDirection: new THREE.Vector3(),
         sunColor: 0xffffff,
-        waterColor: 0x001e0f,
+        waterColor: 0x0066cc, // Brighter blue
         distortionScale: WATER_DISTORTION_SCALE,
-        fog: scene.fog !== undefined
+        fog: scene.fog !== undefined,
+        alpha: WATER_ALPHA,
+        size: 4
     });
     
     water.rotation.x = -Math.PI / 2;
@@ -90,10 +97,10 @@ function init() {
     scene.add(sky);
 
     const skyUniforms = sky.material.uniforms;
-    skyUniforms['turbidity'].value = 10;
-    skyUniforms['rayleigh'].value = 2;
+    skyUniforms['turbidity'].value = 8;
+    skyUniforms['rayleigh'].value = 1.5;
     skyUniforms['mieCoefficient'].value = 0.005;
-    skyUniforms['mieDirectionalG'].value = 0.8;
+    skyUniforms['mieDirectionalG'].value = 0.7;
 
     const sun = new THREE.Vector3();
     const pmremGenerator = new THREE.PMREMGenerator(renderer);
@@ -266,6 +273,14 @@ function update() {
     velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
     playerBoat.position.add(velocity);
 
+    // Add wake effect when moving
+    if (Math.abs(speed) > 100) {
+        water.material.uniforms['distortionScale'].value = 
+            WATER_DISTORTION_SCALE + (Math.abs(speed) / MAX_SPEED) * FOAM_FACTOR;
+    } else {
+        water.material.uniforms['distortionScale'].value = WATER_DISTORTION_SCALE;
+    }
+
     // Keep boat above water
     playerBoat.position.y = Math.max(5, playerBoat.position.y);
 
@@ -328,7 +343,14 @@ function animate() {
     requestAnimationFrame(animate);
     
     // Update water
-    water.material.uniforms['time'].value += 1.0 / 60.0;
+    water.material.uniforms['time'].value += delta * WAVE_SPEED;
+    
+    // Make waves higher in the direction of boat movement
+    if (Math.abs(speed) > 100) {
+        const boatDir = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        water.material.uniforms['distortionScale'].value += 
+            Math.abs(speed) / MAX_SPEED * boatDir.z * FOAM_FACTOR;
+    }
     
     update();
     renderer.render(scene, camera);
