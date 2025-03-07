@@ -4,12 +4,12 @@ import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from 'three/addons/objects/Sky.js';
 
 // Constants for game physics
-const ACCELERATION = 800; // Units per second^2
-const MAX_SPEED = 1000; // Units per second
-const TURN_SPEED = 2.5; // Radians per second
-const DRIFT_FACTOR = 1.5; // Multiplier for turn speed while drifting
-const DRAG_COEFFICIENT = 0.95; // Air/water resistance (lower = more drag)
-const NITRO_MULTIPLIER = 1.8; // Speed boost from nitro
+const ACCELERATION = 2000; // Increased for more responsive acceleration
+const MAX_SPEED = 1500; // Increased top speed
+const TURN_SPEED = 3.5; // Increased for tighter turns
+const DRIFT_FACTOR = 2.0; // More pronounced drift
+const DRAG_COEFFICIENT = 0.98; // Less drag for smoother movement
+const NITRO_MULTIPLIER = 2.0; // Bigger boost
 const WATER_LEVEL = 0; // Y position of water surface
 
 // Update water constants
@@ -207,6 +207,7 @@ const keys = {
 };
 
 function onKeyDown(event) {
+    event.preventDefault(); // Prevent default browser actions
     switch(event.code) {
         case 'KeyW':
         case 'ArrowUp':
@@ -398,43 +399,53 @@ function addRamps(trackPath) {
 function update() {
     const delta = clock.getDelta();
 
-    // Update boat physics
+    // More responsive boat physics
     if (keys.forward) {
         speed += ACCELERATION * delta;
     } else if (keys.backward) {
-        speed -= ACCELERATION * delta;
+        speed -= ACCELERATION * delta * 0.7; // Slower reverse speed
+    } else {
+        // Natural deceleration when no input
+        speed *= 0.95;
     }
 
-    // Apply drag
+    // Apply drag and speed limits
     speed *= DRAG_COEFFICIENT;
-    speed = THREE.MathUtils.clamp(speed, -MAX_SPEED * 0.5, MAX_SPEED);
+    speed = THREE.MathUtils.clamp(speed, -MAX_SPEED * 0.4, MAX_SPEED);
 
-    // Update rotation
+    // Sharper turning when moving
+    const turnMultiplier = Math.abs(speed) / MAX_SPEED; // Turn better at higher speeds
     if (keys.left) {
-        playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta;
+        playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
     }
     if (keys.right) {
-        playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta;
+        playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.5);
     }
 
-    // Update velocity and position
+    // Update velocity and position with better physics
     velocity.set(0, 0, speed * delta);
     velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+    
+    // Add slight banking when turning
+    const bankAmount = (keys.left ? 1 : (keys.right ? -1 : 0)) * Math.abs(speed) / MAX_SPEED * 0.3;
+    playerBoat.rotation.z = bankAmount;
+    
     playerBoat.position.add(velocity);
 
-    // Add wake effect when moving
-    if (Math.abs(speed) > 100) {
-        water.material.uniforms['distortionScale'].value = 
-            WATER_DISTORTION_SCALE + (Math.abs(speed) / MAX_SPEED) * FOAM_FACTOR;
-    } else {
-        water.material.uniforms['distortionScale'].value = WATER_DISTORTION_SCALE;
-    }
+    // Keep boat above water with bobbing effect
+    const bobHeight = Math.sin(Date.now() * 0.003) * 0.5;
+    playerBoat.position.y = Math.max(5 + bobHeight, playerBoat.position.y);
 
-    // Keep boat above water
-    playerBoat.position.y = Math.max(5, playerBoat.position.y);
-
-    // Update camera target
-    controls.target.copy(playerBoat.position);
+    // Camera follows boat more smoothly
+    controls.target.lerp(playerBoat.position, 0.1);
+    camera.position.lerp(
+        new THREE.Vector3(
+            playerBoat.position.x - Math.sin(playerBoat.rotation.y) * 200,
+            100,
+            playerBoat.position.z - Math.cos(playerBoat.rotation.y) * 200
+        ),
+        0.1
+    );
     controls.update();
 
     // Update UI
