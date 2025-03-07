@@ -162,7 +162,13 @@ function init() {
 
         // Add temporary player boat
         const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
-        const boatMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff88 });
+        const boatMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0x00ff88,
+            metalness: 0.6,
+            roughness: 0.3,
+            emissive: 0x00aa66,
+            emissiveIntensity: 0.2
+        });
         playerBoat = new THREE.Mesh(boatGeometry, boatMaterial);
         playerBoat.position.y = 5;
         scene.add(playerBoat);
@@ -345,9 +351,12 @@ function createWaterChannel(trackPath) {
             
             // Create segment geometry
             const segmentGeometry = new THREE.PlaneGeometry(length, TRACK_CONSTANTS.WIDTH);
-            const segmentMaterial = new THREE.MeshPhongMaterial({
+            const segmentMaterial = new THREE.MeshStandardMaterial({
                 color: 0x0044ff,
                 emissive: 0x0033aa,
+                emissiveIntensity: 0.8,
+                metalness: 0.5,
+                roughness: 0.2,
                 transparent: true,
                 opacity: 0.6
             });
@@ -374,10 +383,12 @@ function createWaterChannel(trackPath) {
 
 function createNeonBarriers(trackPath) {
     // Create glowing neon barriers with dynamic lighting
-    const barrierMaterial = new THREE.MeshPhongMaterial({
+    const barrierMaterial = new THREE.MeshStandardMaterial({
         color: 0x00ff88,
         emissive: 0x00ff88,
         emissiveIntensity: 0.8,
+        metalness: 0.6,
+        roughness: 0.3,
         transparent: true,
         opacity: 0.9
     });
@@ -433,7 +444,7 @@ function createNeonBarriers(trackPath) {
 
 function createMegaRamp(startPoint, endPoint) {
     // Create the mega ramp with dramatic lighting
-    const rampMaterial = new THREE.MeshPhongMaterial({
+    const rampMaterial = new THREE.MeshStandardMaterial({
         color: 0x3366ff,
         emissive: 0x3366ff,
         emissiveIntensity: 0.6,
@@ -485,9 +496,12 @@ function createMegaRamp(startPoint, endPoint) {
 
 function addBoostPads(trackPath) {
     const boostGeometry = new THREE.PlaneGeometry(TRACK_CONSTANTS.BOOST_PAD_LENGTH, TRACK_CONSTANTS.WIDTH * 0.3);
-    const boostMaterial = new THREE.MeshPhongMaterial({
+    const boostMaterial = new THREE.MeshStandardMaterial({
         color: 0xff3366,
         emissive: 0xff3366,
+        emissiveIntensity: 0.8,
+        metalness: 0.7,
+        roughness: 0.3,
         transparent: true,
         opacity: 0.7
     });
@@ -521,8 +535,12 @@ function addWaterJets(trackPath) {
     [2, 4, 6].forEach(index => {
         const point = trackPath[index];
         const jetGeometry = new THREE.CylinderGeometry(2, 5, 20, 8);
-        const jetMaterial = new THREE.MeshPhongMaterial({
+        const jetMaterial = new THREE.MeshStandardMaterial({
             color: 0x0088ff,
+            emissive: 0x0066cc,
+            emissiveIntensity: 0.5,
+            metalness: 0.9,
+            roughness: 0.1,
             transparent: true,
             opacity: 0.6
         });
@@ -538,10 +556,12 @@ function addWaterJets(trackPath) {
 function addHazards(trackPath) {
     // Add floating hazards
     const hazardGeometry = new THREE.SphereGeometry(5, 8, 8);
-    const hazardMaterial = new THREE.MeshPhongMaterial({
+    const hazardMaterial = new THREE.MeshStandardMaterial({
         color: 0xff0000,
         emissive: 0xff0000,
-        emissiveIntensity: 0.5
+        emissiveIntensity: 0.5,
+        metalness: 0.8,
+        roughness: 0.2
     });
 
     [2, 5, 7].forEach(index => {
@@ -562,9 +582,12 @@ function addHazards(trackPath) {
 // Create checkpoints
 function createCheckpoints(trackPath) {
     const checkpointGeometry = new THREE.BoxGeometry(TRACK_CONSTANTS.WIDTH, 20, 5);
-    const checkpointMaterial = new THREE.MeshPhongMaterial({
+    const checkpointMaterial = new THREE.MeshStandardMaterial({
         color: 0xffff00,
         emissive: 0xffff00,
+        emissiveIntensity: 0.5,
+        metalness: 0.3,
+        roughness: 0.7,
         transparent: true,
         opacity: 0.3
     });
