@@ -154,10 +154,10 @@ function init() {
     try {
         console.log('Initializing scene...');
         
-        // Create scene
+        // Create scene with brighter sky
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x88aaff); // Lighter blue sky
-        scene.fog = new THREE.FogExp2(0x88aaff, 0.0002); // Less dense fog
+        scene.background = new THREE.Color(0xaaccff); // Even lighter blue sky
+        scene.fog = new THREE.FogExp2(0xaaccff, 0.0002); // Less dense fog
         
         // Create camera
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
@@ -383,11 +383,30 @@ function createSimplifiedTrack() {
         const trackLength = 10000;
         const raceCourseWidth = 300;
         
-        // Create buoys to mark race course
+        // Define track boundary - helpful for debugging
+        const trackBounds = new THREE.Box3(
+            new THREE.Vector3(-raceCourseWidth/2, WATER_LEVEL, -trackLength/2),
+            new THREE.Vector3(raceCourseWidth/2, WATER_LEVEL + 50, trackLength/2)
+        );
+        
+        // Create transparent track area marker for better visibility without affecting visuals
+        const trackAreaGeometry = new THREE.BoxGeometry(raceCourseWidth, 0.1, trackLength);
+        const trackAreaMaterial = new THREE.MeshBasicMaterial({ 
+            color: 0xffffff, 
+            transparent: true, 
+            opacity: 0.05,
+            depthWrite: false // Important to prevent z-fighting
+        });
+        
+        const trackArea = new THREE.Mesh(trackAreaGeometry, trackAreaMaterial);
+        trackArea.position.set(0, WATER_LEVEL + 0.1, 0); // Slightly above water
+        scene.add(trackArea);
+        trackElements.push(trackArea);
+        
+        // Create buoys to mark race course - using basic materials to avoid rendering issues
         const buoyCount = 30;
         const buoySpacing = trackLength / buoyCount;
         
-        // Create buoys on both sides
         for (let i = 0; i < buoyCount; i++) {
             const z = buoySpacing * i - trackLength/2 + buoySpacing/2;
             
@@ -401,7 +420,7 @@ function createSimplifiedTrack() {
         // Create start/finish line
         createStartFinishLine(-trackLength/2 + 100, raceCourseWidth);
         
-        // Create checkpoints
+        // Create checkpoints with basic materials
         const checkpointCount = 8;
         const checkpointSpacing = trackLength / checkpointCount;
         
@@ -410,21 +429,18 @@ function createSimplifiedTrack() {
         }
         
         // Add some islands for scenery (like VibeSail)
+        // Keep islands away from the race course to prevent rendering issues
         for (let i = 0; i < 5; i++) {
-            const xPos = (Math.random() - 0.5) * 2000;
+            // Place islands far from track to avoid interference
+            const xOffset = (Math.random() > 0.5 ? 1 : -1) * (raceCourseWidth + 200 + Math.random() * 1000);
             const zPos = (Math.random() - 0.5) * trackLength;
-            createIsland(xPos, zPos);
+            createIsland(xOffset, zPos);
         }
         
-        // Add subtle directional light markers
-        for (let i = 0; i < 10; i++) {
-            const z = (trackLength / 10) * i - trackLength/2;
-            const dirMarker = new THREE.PointLight(0x3388ff, 0.5, 1000);
-            dirMarker.position.set(0, 50, z);
-            scene.add(dirMarker);
-            trackElements.push(dirMarker);
-            trackLights.push(dirMarker);
-        }
+        // Add subtle ambient light to track area instead of point lights
+        const trackLight = new THREE.AmbientLight(0xffffff, 0.3);
+        scene.add(trackLight);
+        trackElements.push(trackLight);
         
         // Set player position
         resetPlayerPosition();
@@ -439,15 +455,12 @@ function createSimplifiedTrack() {
     }
 }
 
-// Create a simplified buoy inspired by VibeSail
+// Create a simplified buoy inspired by VibeSail - using basic materials
 function createBuoy(x, z, color) {
+    // Use simple geometry and basic material for better performance
     const buoyGeometry = new THREE.CylinderGeometry(3, 3, 6, 8);
-    const buoyMaterial = new THREE.MeshStandardMaterial({
-        color: color,
-        roughness: 0.7,
-        metalness: 0.2,
-        emissive: color,
-        emissiveIntensity: 0.3
+    const buoyMaterial = new THREE.MeshBasicMaterial({
+        color: color
     });
     
     const buoy = new THREE.Mesh(buoyGeometry, buoyMaterial);
@@ -458,9 +471,8 @@ function createBuoy(x, z, color) {
     
     // Add simple pole
     const poleGeometry = new THREE.CylinderGeometry(0.5, 0.5, 10, 8);
-    const poleMaterial = new THREE.MeshStandardMaterial({
-        color: 0xdddddd,
-        roughness: 0.5
+    const poleMaterial = new THREE.MeshBasicMaterial({
+        color: 0xdddddd
     });
     
     const pole = new THREE.Mesh(poleGeometry, poleMaterial);
@@ -468,8 +480,8 @@ function createBuoy(x, z, color) {
     scene.add(pole);
     trackElements.push(pole);
     
-    // Add light on top
-    const pointLight = new THREE.PointLight(color, 0.5, 50);
+    // Use simpler light with limited radius
+    const pointLight = new THREE.PointLight(color, 0.3, 30);
     pointLight.position.set(x, WATER_LEVEL + 16, z);
     scene.add(pointLight);
     trackElements.push(pointLight);
@@ -969,19 +981,33 @@ function animate() {
         // Update game state
         if (gameStarted) {
             update(deltaTime);
-        }
-        
-        // Ensure fog color matches sky color - prevents blue screen issue
-        if (scene && scene.fog) {
-            const fogColor = new THREE.Color(0x001133);
-            if (scene.background) {
-                scene.fog.color.copy(scene.background);
-            } else {
-                scene.fog.color.copy(fogColor);
+            
+            // Adjust fog density based on player position
+            // Reduce fog when inside track area for better visibility
+            if (scene && scene.fog && playerBoat) {
+                const trackWidth = 300;
+                const trackLength = 10000;
+                
+                // Check if player is in track bounds
+                const isInTrackX = Math.abs(playerBoat.position.x) < trackWidth/2;
+                const isInTrackZ = Math.abs(playerBoat.position.z) < trackLength/2;
+                
+                if (isInTrackX && isInTrackZ) {
+                    // Inside track - reduce fog for better visibility
+                    scene.fog.density = 0.0001;
+                } else {
+                    // Outside track - normal fog
+                    scene.fog.density = 0.0002;
+                }
+                
+                // Ensure fog color always matches sky color
+                if (scene.background) {
+                    scene.fog.color.copy(scene.background);
+                }
             }
         }
         
-        // Render scene
+        // Render scene with clear sky background
         renderer.render(scene, camera);
     } catch (error) {
         console.error('Error in animation loop:', error);
