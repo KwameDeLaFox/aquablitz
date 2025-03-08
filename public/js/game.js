@@ -8,12 +8,12 @@ import { Sky } from 'three/addons/objects/Sky.js';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Constants for game physics
-const ACCELERATION = 1000; // Reduced for more comfortable acceleration
-const MAX_SPEED = 800; // Reduced top speed
-const TURN_SPEED = 2.5; // Reduced for more comfortable turning
-const DRIFT_FACTOR = 1.5; // Reduced drift
-const DRAG_COEFFICIENT = 0.98; // Same drag for smooth movement
-const NITRO_MULTIPLIER = 1.8; // Reduced boost
+const ACCELERATION = 500; // Adjusted for better control
+const MAX_SPEED = 500; // Balanced top speed
+const TURN_SPEED = 1.8; // Adjusted for better turning
+const DRIFT_FACTOR = 1.3; // Adjusted drift
+const DRAG_COEFFICIENT = 0.98; // Drag for smooth deceleration
+const NITRO_MULTIPLIER = 1.5; // Boost multiplier
 const WATER_LEVEL = 0; // Y position of water surface
 
 // Update water constants
@@ -58,9 +58,94 @@ const socket = io({
 });
 const otherPlayers = new Map();
 
+// Game keys mapping
+const keys = {
+    forward: false,
+    backward: false,
+    left: false,
+    right: false,
+    drift: false,
+    powerUp: false
+};
+
+// Setup keyboard listeners at the top level
+function setupKeyboardListeners() {
+    document.addEventListener('keydown', function(event) {
+        handleKeyDown(event);
+    });
+    
+    document.addEventListener('keyup', function(event) {
+        handleKeyUp(event);
+    });
+    
+    console.log('Keyboard listeners set up');
+}
+
+// Handle keydown events
+function handleKeyDown(event) {
+    console.log('Key down:', event.code);
+    switch(event.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+            keys.forward = true;
+            break;
+        case 'KeyS':
+        case 'ArrowDown':
+            keys.backward = true;
+            break;
+        case 'KeyA':
+        case 'ArrowLeft':
+            keys.left = true;
+            break;
+        case 'KeyD':
+        case 'ArrowRight':
+            keys.right = true;
+            break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+            keys.drift = true;
+            break;
+        case 'Space':
+            keys.powerUp = true;
+            usePowerUp();
+            break;
+    }
+}
+
+// Handle keyup events
+function handleKeyUp(event) {
+    console.log('Key up:', event.code);
+    switch(event.code) {
+        case 'KeyW':
+        case 'ArrowUp':
+            keys.forward = false;
+            break;
+        case 'KeyS':
+        case 'ArrowDown':
+            keys.backward = false;
+            break;
+        case 'KeyA':
+        case 'ArrowLeft':
+            keys.left = false;
+            break;
+        case 'KeyD':
+        case 'ArrowRight':
+            keys.right = false;
+            break;
+        case 'ShiftLeft':
+        case 'ShiftRight':
+            keys.drift = false;
+            break;
+        case 'Space':
+            keys.powerUp = false;
+            break;
+    }
+}
+
 // Initialize the game when the DOM is loaded
 document.addEventListener('DOMContentLoaded', function() {
     console.log('DOM loaded, initializing game...');
+    setupKeyboardListeners();
     init();
 });
 
@@ -597,109 +682,11 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Keyboard controls
-const keys = {
-    forward: false,
-    backward: false,
-    left: false,
-    right: false,
-    drift: false,
-    powerUp: false
-};
-
-// Set up keyboard event listeners
-window.addEventListener('keydown', function(event) {
-    console.log('Global keydown:', event.key);
-    switch(event.key) {
-        case 'w':
-        case 'W':
-        case 'ArrowUp':
-            keys.forward = true;
-            break;
-        case 's':
-        case 'S':
-        case 'ArrowDown':
-            keys.backward = true;
-            break;
-        case 'a':
-        case 'A':
-        case 'ArrowLeft':
-            keys.left = true;
-            break;
-        case 'd':
-        case 'D':
-        case 'ArrowRight':
-            keys.right = true;
-            break;
-        case 'Shift':
-            keys.drift = true;
-            break;
-        case ' ':
-            keys.powerUp = true;
-            break;
-    }
-});
-
-window.addEventListener('keyup', function(event) {
-    console.log('Global keyup:', event.key);
-    switch(event.key) {
-        case 'w':
-        case 'W':
-        case 'ArrowUp':
-            keys.forward = false;
-            break;
-        case 's':
-        case 'S':
-        case 'ArrowDown':
-            keys.backward = false;
-            break;
-        case 'a':
-        case 'A':
-        case 'ArrowLeft':
-            keys.left = false;
-            break;
-        case 'd':
-        case 'D':
-        case 'ArrowRight':
-            keys.right = false;
-            break;
-        case 'Shift':
-            keys.drift = false;
-            break;
-        case ' ':
-            keys.powerUp = false;
-            break;
-    }
-});
-
-// Power-up logic
-function usePowerUp() {
-    if (powerUpType === 'nitro') {
-        speed *= NITRO_MULTIPLIER;
-        socket.emit('powerUpUsed', {
-            type: 'nitro',
-            position: playerBoat.position.toArray()
-        });
-    }
-    hasPowerUp = false;
-    powerUpType = null;
-    document.getElementById('power-up').textContent = 'NO POWER-UP';
-}
-
-// Update game state
+// Update function for game logic
 function update(deltaTime) {
     try {
-        // Process keyboard input
-        processKeys(pressedKeys, document.getElementById('speed-meter'));
-        
-        // Apply physics
-        playerBoat.position.add(velocity.clone().multiplyScalar(deltaTime));
-        
-        // Make the boat pitch based on speed and turn amount
-        const pitchAmount = velocity.z * 0.0001;
-        const rollAmount = velocity.x * 0.0005;
-        playerBoat.rotation.x = Math.max(-0.1, Math.min(0.1, -pitchAmount));
-        playerBoat.rotation.z = Math.max(-0.2, Math.min(0.2, -rollAmount));
+        // Process keyboard input for boat movement
+        processBoatMovement(deltaTime);
         
         // Apply water height to boat
         const time = performance.now() * 0.001;
@@ -707,8 +694,18 @@ function update(deltaTime) {
                           Math.sin(time * 1.0 + playerBoat.position.z * 0.01) * 0.5;
         playerBoat.position.y = WATER_LEVEL + 5 + waveHeight;
         
+        // Make the boat pitch based on speed and turn amount
+        const pitchAmount = velocity.z * 0.0001;
+        const rollAmount = velocity.x * 0.0005;
+        playerBoat.rotation.x = Math.max(-0.1, Math.min(0.1, -pitchAmount));
+        playerBoat.rotation.z = Math.max(-0.2, Math.min(0.2, -rollAmount));
+        
         // Update camera to follow player
         updateCameraPosition();
+        
+        // Update speed display
+        const speed = velocity.length();
+        document.getElementById('speed-meter').textContent = `${Math.round(speed)} KPH`;
         
         // Check for checkpoint collisions
         checkpoints.forEach(checkpoint => {
@@ -719,25 +716,122 @@ function update(deltaTime) {
                     console.log('Checkpoint passed!');
                     
                     // Visual feedback
-                    checkpoint.object.material.emissive = new THREE.Color(0xffff00);
-                    checkpoint.object.material.emissiveIntensity = 0.5;
+                    if (checkpoint.object.material) {
+                        checkpoint.object.material.emissive = new THREE.Color(0xffff00);
+                        checkpoint.object.material.emissiveIntensity = 0.5;
+                    }
                 }
             }
         });
         
         // Check for buoy collisions (simplified)
         barriers.forEach(barrier => {
-            const distance = playerBoat.position.distanceTo(barrier.position);
-            if (distance < 20) {
-                // Collision response - bounce back slightly
-                const direction = new THREE.Vector3();
-                direction.subVectors(playerBoat.position, barrier.position).normalize();
-                velocity.add(direction.multiplyScalar(100));
+            if (barrier && barrier.position) {
+                const distance = playerBoat.position.distanceTo(barrier.position);
+                if (distance < 20) {
+                    // Collision response - bounce back slightly
+                    const direction = new THREE.Vector3();
+                    direction.subVectors(playerBoat.position, barrier.position).normalize();
+                    velocity.add(direction.multiplyScalar(100));
+                }
             }
         });
     } catch (error) {
-        console.error('Error in update function:', error);
+        console.error('Error in update function:', error, error.stack);
     }
+}
+
+// Process boat movement based on keyboard input
+function processBoatMovement(deltaTime) {
+    // Acceleration based on input
+    acceleration.set(0, 0, 0);
+    
+    if (keys.forward) {
+        // Forward acceleration in the direction the boat is facing
+        const forwardAccel = new THREE.Vector3(0, 0, ACCELERATION * deltaTime);
+        forwardAccel.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        acceleration.add(forwardAccel);
+        console.log('Accelerating forward');
+    }
+    
+    if (keys.backward) {
+        // Backward acceleration (braking) in the opposite direction
+        const backwardAccel = new THREE.Vector3(0, 0, -ACCELERATION * 0.5 * deltaTime);
+        backwardAccel.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        acceleration.add(backwardAccel);
+        console.log('Braking/reversing');
+    }
+    
+    // Apply drag (more when not accelerating)
+    const dragFactor = (keys.forward || keys.backward) ? DRAG_COEFFICIENT : 0.95;
+    velocity.multiplyScalar(dragFactor);
+    
+    // Add acceleration to velocity
+    velocity.add(acceleration);
+    
+    // Limit maximum speed
+    const currentSpeed = velocity.length();
+    if (currentSpeed > MAX_SPEED) {
+        velocity.multiplyScalar(MAX_SPEED / currentSpeed);
+    }
+    
+    // Handle turning
+    if (keys.left) {
+        // Turn left (positive rotation around Y axis)
+        const turnAmount = TURN_SPEED * deltaTime * (keys.drift ? DRIFT_FACTOR : 1);
+        playerBoat.rotation.y += turnAmount;
+        console.log('Turning left');
+        
+        // Add a slight sideways velocity component when turning
+        const sideForce = new THREE.Vector3(turnAmount * 100, 0, 0);
+        sideForce.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        velocity.add(sideForce);
+    }
+    
+    if (keys.right) {
+        // Turn right (negative rotation around Y axis)
+        const turnAmount = TURN_SPEED * deltaTime * (keys.drift ? DRIFT_FACTOR : 1);
+        playerBoat.rotation.y -= turnAmount;
+        console.log('Turning right');
+        
+        // Add a slight sideways velocity component when turning
+        const sideForce = new THREE.Vector3(-turnAmount * 100, 0, 0);
+        sideForce.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        velocity.add(sideForce);
+    }
+    
+    // Apply nitro boost if active
+    if (isNitroActive) {
+        const boostTime = (Date.now() - nitroStartTime) / 1000; // seconds
+        if (boostTime < 3) { // 3 second boost
+            // Apply boost in the direction the boat is facing
+            const boostAccel = new THREE.Vector3(0, 0, ACCELERATION * NITRO_MULTIPLIER * deltaTime);
+            boostAccel.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+            velocity.add(boostAccel);
+        } else {
+            isNitroActive = false;
+        }
+    }
+    
+    // Update boat position based on velocity
+    playerBoat.position.add(velocity.clone().multiplyScalar(deltaTime));
+}
+
+// Use power-up function
+function usePowerUp() {
+    console.log('Using power-up');
+    
+    // Activate nitro boost
+    isNitroActive = true;
+    nitroStartTime = Date.now();
+    
+    // Visual feedback
+    document.getElementById('power-up').textContent = "NITRO BOOST!";
+    
+    // Reset after 3 seconds
+    setTimeout(() => {
+        document.getElementById('power-up').textContent = "NO POWER-UP";
+    }, 3000);
 }
 
 // Add a manual update button to the UI
