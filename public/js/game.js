@@ -362,80 +362,90 @@ function createSimpleEndlessTrack() {
         
         // Create track segments
         for (let z = -trackLength/2; z < trackLength/2; z += segmentLength) {
-            // Create track segment (road)
+            // Create track segment (road) - make it more visible with brighter color
             const roadGeometry = new THREE.PlaneGeometry(trackWidth, segmentLength);
             const roadMaterial = new THREE.MeshStandardMaterial({
-                color: 0x333333,
+                color: 0x444444, // Lighter gray for better visibility
                 roughness: 0.8,
-                metalness: 0.2
+                metalness: 0.2,
+                emissive: 0x222222, // Add some emissive for better visibility
+                emissiveIntensity: 0.2
             });
             const road = new THREE.Mesh(roadGeometry, roadMaterial);
             road.rotation.x = -Math.PI / 2;
-            road.position.set(0, WATER_LEVEL + 0.1, z);
+            road.position.set(0, WATER_LEVEL + 0.5, z); // Raise it slightly above water
             scene.add(road);
             trackBarriers.push(road); // Store for cleanup
             
-            // Add lane markings
-            const laneMarkingGeometry = new THREE.PlaneGeometry(5, segmentLength * 0.8);
+            // Add lane markings - make them brighter and more visible
+            const laneMarkingGeometry = new THREE.PlaneGeometry(10, segmentLength * 0.8); // Wider markings
             const laneMarkingMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffffff
+                color: 0xffffff,
+                emissive: 0xffffff,
+                emissiveIntensity: 1.0
             });
             const laneMarking = new THREE.Mesh(laneMarkingGeometry, laneMarkingMaterial);
             laneMarking.rotation.x = -Math.PI / 2;
-            laneMarking.position.set(0, WATER_LEVEL + 0.2, z);
+            laneMarking.position.set(0, WATER_LEVEL + 0.6, z); // Slightly above road
             scene.add(laneMarking);
             trackBarriers.push(laneMarking); // Store for cleanup
             
-            // Create left barrier
-            const leftBarrierGeometry = new THREE.BoxGeometry(5, 20, segmentLength);
+            // Create left barrier - make it taller and more visible
+            const leftBarrierGeometry = new THREE.BoxGeometry(10, 30, segmentLength);
             const leftBarrierMaterial = new THREE.MeshStandardMaterial({
                 color: 0x00ff88,
                 emissive: 0x00ff88,
-                emissiveIntensity: 0.5,
+                emissiveIntensity: 0.8, // Increased intensity
                 roughness: 0.3,
                 metalness: 0.7
             });
             const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
-            leftBarrier.position.set(-trackWidth/2 - 2.5, 10, z);
+            leftBarrier.position.set(-trackWidth/2 - 5, 15, z); // Taller and wider
             scene.add(leftBarrier);
             trackBarriers.push(leftBarrier);
             
-            // Create right barrier
-            const rightBarrierGeometry = new THREE.BoxGeometry(5, 20, segmentLength);
+            // Create right barrier - make it taller and more visible
+            const rightBarrierGeometry = new THREE.BoxGeometry(10, 30, segmentLength);
             const rightBarrierMaterial = new THREE.MeshStandardMaterial({
                 color: 0x00ff88,
                 emissive: 0x00ff88,
-                emissiveIntensity: 0.5,
+                emissiveIntensity: 0.8, // Increased intensity
                 roughness: 0.3,
                 metalness: 0.7
             });
             const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
-            rightBarrier.position.set(trackWidth/2 + 2.5, 10, z);
+            rightBarrier.position.set(trackWidth/2 + 5, 15, z); // Taller and wider
             scene.add(rightBarrier);
             trackBarriers.push(rightBarrier);
+            
+            // Add additional lighting for the track segment
+            const trackLight = new THREE.PointLight(0xffffff, 1, 500);
+            trackLight.position.set(0, 50, z);
+            scene.add(trackLight);
+            trackLights.push(trackLight);
             
             // Add billboards on alternating sides
             if (z % (segmentLength * 2) === 0) {
                 // Left side billboard
-                createBillboard(-trackWidth/2 - 50, z, 0);
+                createBillboard(-trackWidth/2 - 80, z, 0); // Further from track
             } else {
                 // Right side billboard
-                createBillboard(trackWidth/2 + 50, z, 1);
+                createBillboard(trackWidth/2 + 80, z, 1); // Further from track
             }
             
-            // Add checkpoint
-            const checkpointGeometry = new THREE.BoxGeometry(trackWidth, 20, 5);
+            // Add checkpoint with more visibility
+            const checkpointGeometry = new THREE.BoxGeometry(trackWidth, 40, 5); // Taller
             const checkpointMaterial = new THREE.MeshStandardMaterial({
                 color: 0xffff00,
                 emissive: 0xffff00,
-                emissiveIntensity: 0.3,
+                emissiveIntensity: 0.8, // Increased intensity
                 transparent: true,
-                opacity: 0.3,
+                opacity: 0.5, // More visible
                 roughness: 0.7,
                 metalness: 0.3
             });
             const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
-            checkpoint.position.set(0, 10, z + segmentLength/2);
+            checkpoint.position.set(0, 20, z + segmentLength/2); // Higher
             scene.add(checkpoint);
             checkpoints.push(checkpoint);
         }
@@ -449,6 +459,16 @@ function createSimpleEndlessTrack() {
         controls.target.copy(playerBoat.position);
         controls.update();
         
+        // Add global lighting to make track more visible
+        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+        scene.add(hemisphereLight);
+        
+        // Add directional light to cast shadows and improve visibility
+        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+        dirLight.position.set(0, 200, 100);
+        dirLight.castShadow = true;
+        scene.add(dirLight);
+        
         console.log('Simple endless track created successfully');
     } catch (error) {
         console.error('Error creating simple endless track:', error);
@@ -458,44 +478,44 @@ function createSimpleEndlessTrack() {
 // Create a billboard with sponsor logo
 function createBillboard(x, z, type) {
     // Billboard stand
-    const standGeometry = new THREE.BoxGeometry(10, 50, 10);
+    const standGeometry = new THREE.BoxGeometry(15, 80, 15); // Taller and wider
     const standMaterial = new THREE.MeshStandardMaterial({
         color: 0x888888,
         roughness: 0.7,
         metalness: 0.3
     });
     const stand = new THREE.Mesh(standGeometry, standMaterial);
-    stand.position.set(x, 25, z);
+    stand.position.set(x, 40, z); // Higher
     scene.add(stand);
     trackBarriers.push(stand);
     
     // Billboard panel
-    const panelGeometry = new THREE.PlaneGeometry(80, 40);
+    const panelGeometry = new THREE.PlaneGeometry(120, 60); // Larger panel
     
     // Different billboard designs
     let panelMaterial;
     if (type === 0) {
-        // Neon sponsor logo
+        // Neon sponsor logo - brighter
         panelMaterial = new THREE.MeshStandardMaterial({
             color: 0xff3366,
             emissive: 0xff3366,
-            emissiveIntensity: 0.8,
+            emissiveIntensity: 1.0, // Increased intensity
             roughness: 0.3,
             metalness: 0.7
         });
     } else {
-        // Aqua Blitz logo
+        // Aqua Blitz logo - brighter
         panelMaterial = new THREE.MeshStandardMaterial({
             color: 0x00aaff,
             emissive: 0x00aaff,
-            emissiveIntensity: 0.8,
+            emissiveIntensity: 1.0, // Increased intensity
             roughness: 0.3,
             metalness: 0.7
         });
     }
     
     const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-    panel.position.set(x, 50, z);
+    panel.position.set(x, 80, z); // Higher
     
     // Rotate to face the track
     if (x < 0) {
@@ -507,13 +527,14 @@ function createBillboard(x, z, type) {
     scene.add(panel);
     trackBarriers.push(panel);
     
-    // Add spotlight to illuminate billboard
-    const spotLight = new THREE.SpotLight(type === 0 ? 0xff3366 : 0x00aaff, 1);
-    spotLight.position.set(x, 70, z);
+    // Add spotlight to illuminate billboard - brighter
+    const spotLight = new THREE.SpotLight(type === 0 ? 0xff3366 : 0x00aaff, 2); // Increased intensity
+    spotLight.position.set(x, 120, z); // Higher
     spotLight.target = panel;
-    spotLight.angle = 0.5;
+    spotLight.angle = 0.6; // Wider angle
     spotLight.penumbra = 0.5;
-    spotLight.distance = 100;
+    spotLight.distance = 200; // Increased range
+    spotLight.intensity = 2; // Brighter
     scene.add(spotLight);
     trackLights.push(spotLight);
 }
