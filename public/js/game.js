@@ -58,6 +58,15 @@ const PROJECTILE_LIFETIME = 3; // Seconds before projectile is removed
 const PROJECTILE_COOLDOWN = 0.5; // Seconds between shots
 let lastShotTime = 0; // Time of the last shot
 
+// Enemy boat system variables
+let enemyBoats = []; // Array to store enemy boats
+const ENEMY_COUNT = 3; // Number of enemy boats to create
+const ENEMY_SPEED = 120; // Base speed of enemy boats
+const ENEMY_DETECTION_RANGE = 500; // Distance at which enemies detect the player
+const ENEMY_ATTACK_RANGE = 300; // Distance at which enemies will attack the player
+const ENEMY_TURN_SPEED = 1.0; // How fast enemies can turn
+const ENEMY_HEALTH = 3; // Number of hits required to destroy an enemy boat
+
 // Multiplayer
 const socket = io({
     transports: ['websocket'],
@@ -268,6 +277,10 @@ function init() {
         // Create simplified track
         createSimplifiedTrack();
         console.log('Track created');
+        
+        // Create enemy boats
+        createEnemyBoats();
+        console.log('Enemy boats created');
         
         // Event listeners
         window.addEventListener('resize', onWindowResize);
@@ -736,6 +749,9 @@ function update(deltaTime) {
         // Update projectiles
         updateProjectiles(deltaTime);
         
+        // Update enemy boats
+        updateEnemyBoats(deltaTime);
+        
         // Apply water height to boat
         const time = performance.now() * 0.001;
         const waveHeight = Math.sin(time * 0.5 + playerBoat.position.x * 0.01) * 0.5 + 
@@ -783,6 +799,21 @@ function update(deltaTime) {
                     const direction = new THREE.Vector3();
                     direction.subVectors(playerBoat.position, barrier.position).normalize();
                     velocity.add(direction.multiplyScalar(100));
+                }
+            }
+        });
+        
+        // Check for collisions with enemy boats
+        enemyBoats.forEach(enemy => {
+            if (!enemy.isDestroyed && enemy.boat) {
+                const distance = playerBoat.position.distanceTo(enemy.boat.position);
+                if (distance < 40) { // Collision threshold for boats
+                    // Collision response - bounce away from each other
+                    const direction = new THREE.Vector3();
+                    direction.subVectors(playerBoat.position, enemy.boat.position).normalize();
+                    velocity.add(direction.multiplyScalar(150)); // Strong bounce
+                    
+                    // Also damage the player (could be implemented later)
                 }
             }
         });
@@ -1129,15 +1160,47 @@ function updateProjectiles(deltaTime) {
         }
         
         // Check for collisions with barriers
+        let hasCollided = false;
         for (const barrier of barriers) {
             if (barrier && barrier.position && !projectile.hasCollided) {
                 const distance = projectile.object.position.distanceTo(barrier.position);
                 if (distance < 10) { // Collision threshold
                     // Mark as collided
                     projectile.hasCollided = true;
+                    hasCollided = true;
                     
                     // Create explosion effect
                     createExplosion(projectile.object.position);
+                    
+                    // Remove projectile
+                    scene.remove(projectile.object);
+                    // Remove light
+                    if (projectile.object.userData.light) {
+                        scene.remove(projectile.object.userData.light);
+                    }
+                    // Remove from array
+                    projectiles.splice(i, 1);
+                    break;
+                }
+            }
+        }
+        
+        // If already collided with barrier, skip enemy checks
+        if (hasCollided) continue;
+        
+        // Check for collisions with enemy boats
+        for (const enemy of enemyBoats) {
+            if (!projectile.hasCollided && !enemy.isDestroyed && enemy.boat) {
+                const distance = projectile.object.position.distanceTo(enemy.boat.position);
+                if (distance < 25) { // Larger collision threshold for boats
+                    // Mark as collided
+                    projectile.hasCollided = true;
+                    
+                    // Create explosion effect
+                    createExplosion(projectile.object.position);
+                    
+                    // Process hit on enemy
+                    hitEnemyBoat(enemy, projectile);
                     
                     // Remove projectile
                     scene.remove(projectile.object);
@@ -1193,6 +1256,296 @@ function createExplosion(position) {
         // Fade out explosion
         explosion.material.opacity = 0.8 * (1 - elapsedTime * 2);
         explosionLight.intensity = 2 * (1 - elapsedTime * 2);
+        
+        // Continue animation
+        requestAnimationFrame(expandAndFade);
+    };
+    
+    // Start animation
+    expandAndFade();
+}
+
+// Create enemy boats at different positions
+function createEnemyBoats() {
+    // Clear any existing enemy boats
+    enemyBoats.forEach(enemy => {
+        if (enemy.boat) {
+            scene.remove(enemy.boat);
+        }
+    });
+    enemyBoats = [];
+    
+    const trackLength = 10000;
+    const trackWidth = 300;
+    
+    // Create enemy boats with different colors and positions
+    const enemyColors = [0xff0000, 0x0000ff, 0xaa00aa]; // Red, Blue, Purple
+    
+    for (let i = 0; i < ENEMY_COUNT; i++) {
+        // Create enemy boat
+        const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
+        const boatMaterial = new THREE.MeshStandardMaterial({ 
+            color: enemyColors[i % enemyColors.length], 
+            metalness: 0.2,
+            roughness: 0.4,
+            emissive: enemyColors[i % enemyColors.length], 
+            emissiveIntensity: 0.3
+        });
+        
+        const enemyBoat = new THREE.Mesh(boatGeometry, boatMaterial);
+        
+        // Calculate spawn position along the track, with some randomization
+        const spawnZ = -trackLength/2 + (trackLength * (i + 1) / (ENEMY_COUNT + 1)) + (Math.random() * 300 - 150);
+        const spawnX = (Math.random() - 0.5) * trackWidth * 0.8; // Within 80% of track width
+        
+        enemyBoat.position.set(spawnX, WATER_LEVEL + 5, spawnZ);
+        enemyBoat.rotation.y = Math.random() * Math.PI * 2; // Random initial rotation
+        
+        // Add a sail to make it look like a boat
+        const sailGeometry = new THREE.BoxGeometry(2, 25, 15);
+        const sailMaterial = new THREE.MeshStandardMaterial({ 
+            color: 0xffffff, 
+            roughness: 0.3
+        });
+        const sail = new THREE.Mesh(sailGeometry, sailMaterial);
+        sail.position.set(0, 20, -5);
+        enemyBoat.add(sail);
+        
+        // Add enemy boat to scene
+        scene.add(enemyBoat);
+        
+        // Create enemy boat data object
+        const enemyData = {
+            boat: enemyBoat,
+            health: ENEMY_HEALTH,
+            velocity: new THREE.Vector3(0, 0, 0),
+            acceleration: new THREE.Vector3(0, 0, 0),
+            state: 'patrolling', // patrolling, chasing, attacking
+            patrolPoint: new THREE.Vector3(
+                spawnX + (Math.random() - 0.5) * 200,
+                WATER_LEVEL + 5,
+                spawnZ + (Math.random() - 0.5) * 200
+            ),
+            patrolDirection: 1,
+            nextPatrolChange: Date.now() + 5000 + Math.random() * 5000, // 5-10 seconds
+            lastDamageTime: 0,
+            isDestroyed: false
+        };
+        
+        // Add enemy boat to array
+        enemyBoats.push(enemyData);
+    }
+    
+    console.log(`${enemyBoats.length} enemy boats created`);
+}
+
+// Update enemy boats AI and movement
+function updateEnemyBoats(deltaTime) {
+    // Update each enemy boat
+    for (let i = enemyBoats.length - 1; i >= 0; i--) {
+        const enemy = enemyBoats[i];
+        
+        // Skip updating destroyed enemies
+        if (enemy.isDestroyed) continue;
+        
+        // Apply wave motion to enemy boats (just like player boat)
+        const time = performance.now() * 0.001;
+        const waveHeight = Math.sin(time * 0.5 + enemy.boat.position.x * 0.01) * 0.5 + 
+                          Math.sin(time * 1.0 + enemy.boat.position.z * 0.01) * 0.5;
+        enemy.boat.position.y = WATER_LEVEL + 5 + waveHeight;
+        
+        // Calculate distance to player
+        const distanceToPlayer = enemy.boat.position.distanceTo(playerBoat.position);
+        
+        // Determine AI state based on distance to player
+        if (distanceToPlayer < ENEMY_ATTACK_RANGE) {
+            enemy.state = 'attacking';
+        } else if (distanceToPlayer < ENEMY_DETECTION_RANGE) {
+            enemy.state = 'chasing';
+        } else {
+            enemy.state = 'patrolling';
+        }
+        
+        // AI behavior based on state
+        if (enemy.state === 'patrolling') {
+            // Move towards patrol point
+            const directionToPatrol = new THREE.Vector3().subVectors(enemy.patrolPoint, enemy.boat.position).normalize();
+            
+            // Calculate target rotation (the direction we want to face)
+            const targetRotation = Math.atan2(directionToPatrol.x, directionToPatrol.z);
+            
+            // Rotate towards target direction
+            const rotationDiff = normalizeAngle(targetRotation - enemy.boat.rotation.y);
+            enemy.boat.rotation.y += Math.sign(rotationDiff) * Math.min(Math.abs(rotationDiff), ENEMY_TURN_SPEED * deltaTime);
+            
+            // Move forward in boat's direction
+            const forwardVector = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), enemy.boat.rotation.y);
+            enemy.boat.position.add(forwardVector.multiplyScalar(ENEMY_SPEED * 0.7 * deltaTime));
+            
+            // Check if we've reached the patrol point
+            if (enemy.boat.position.distanceTo(enemy.patrolPoint) < 50 || Date.now() > enemy.nextPatrolChange) {
+                // Choose a new patrol point
+                enemy.patrolPoint = new THREE.Vector3(
+                    (Math.random() - 0.5) * 600,
+                    WATER_LEVEL + 5,
+                    enemy.boat.position.z + (Math.random() - 0.5) * 600
+                );
+                enemy.nextPatrolChange = Date.now() + 5000 + Math.random() * 5000; // 5-10 seconds
+            }
+        } else if (enemy.state === 'chasing' || enemy.state === 'attacking') {
+            // Chase the player - calculate direction to player
+            const directionToPlayer = new THREE.Vector3().subVectors(playerBoat.position, enemy.boat.position).normalize();
+            
+            // Calculate target rotation to face player
+            const targetRotation = Math.atan2(directionToPlayer.x, directionToPlayer.z);
+            
+            // Rotate towards player
+            const rotationDiff = normalizeAngle(targetRotation - enemy.boat.rotation.y);
+            enemy.boat.rotation.y += Math.sign(rotationDiff) * Math.min(Math.abs(rotationDiff), ENEMY_TURN_SPEED * deltaTime);
+            
+            // Move forward in boat's direction
+            const forwardVector = new THREE.Vector3(0, 0, 1).applyAxisAngle(new THREE.Vector3(0, 1, 0), enemy.boat.rotation.y);
+            const speed = enemy.state === 'attacking' ? ENEMY_SPEED : ENEMY_SPEED * 0.9;
+            enemy.boat.position.add(forwardVector.multiplyScalar(speed * deltaTime));
+            
+            // If in attacking range, maybe shoot at player (later feature)
+        }
+        
+        // Apply boat pitch and roll based on movement
+        const pitchAmount = Math.sin(time * 2) * 0.04;
+        const rollAmount = Math.sin(time * 1.5) * 0.05;
+        enemy.boat.rotation.x = Math.max(-0.1, Math.min(0.1, pitchAmount));
+        enemy.boat.rotation.z = Math.max(-0.2, Math.min(0.2, rollAmount));
+        
+        // Flash red when recently damaged
+        const timeSinceDamage = Date.now() - enemy.lastDamageTime;
+        if (timeSinceDamage < 300) { // Flash for 300ms
+            const flash = Math.sin(timeSinceDamage / 30) > 0;
+            enemy.boat.material.emissiveIntensity = flash ? 1.0 : 0.3;
+        } else {
+            enemy.boat.material.emissiveIntensity = 0.3;
+        }
+    }
+}
+
+// Normalize angle to be between -PI and PI
+function normalizeAngle(angle) {
+    return Math.atan2(Math.sin(angle), Math.cos(angle));
+}
+
+// Handle enemy boat being hit by projectile
+function hitEnemyBoat(enemy, projectile) {
+    // Update last damage time for visual effect
+    enemy.lastDamageTime = Date.now();
+    
+    // Reduce enemy health
+    enemy.health--;
+    
+    // Check if enemy is destroyed
+    if (enemy.health <= 0 && !enemy.isDestroyed) {
+        destroyEnemyBoat(enemy);
+    }
+}
+
+// Destroy an enemy boat with visual effects
+function destroyEnemyBoat(enemy) {
+    enemy.isDestroyed = true;
+    
+    // Create large explosion effect
+    createLargeExplosion(enemy.boat.position);
+    
+    // Make the boat sink slowly
+    const startPosition = enemy.boat.position.clone();
+    const startTime = Date.now();
+    const sinkDuration = 3000; // 3 seconds to sink
+    
+    // Animate sinking
+    const animateSinking = function() {
+        const elapsedTime = Date.now() - startTime;
+        const progress = Math.min(elapsedTime / sinkDuration, 1.0);
+        
+        if (progress >= 1.0) {
+            // Remove boat after sinking
+            scene.remove(enemy.boat);
+            return;
+        }
+        
+        // Sink and tilt the boat
+        enemy.boat.position.y = startPosition.y - progress * 20; // Sink 20 units down
+        enemy.boat.rotation.x = progress * Math.PI / 3; // Tilt forward
+        enemy.boat.rotation.z = progress * (Math.random() > 0.5 ? 1 : -1) * Math.PI / 4; // Tilt to side
+        
+        // Fade out boat material
+        if (enemy.boat.material) {
+            enemy.boat.material.opacity = 1 - progress;
+            enemy.boat.material.transparent = true;
+        }
+        
+        // Continue animation
+        requestAnimationFrame(animateSinking);
+    };
+    
+    // Start sinking animation
+    animateSinking();
+}
+
+// Create a larger explosion effect for boat destruction
+function createLargeExplosion(position) {
+    // Create multiple explosion effects at slightly different positions
+    for (let i = 0; i < 5; i++) {
+        const offsetX = (Math.random() - 0.5) * 15;
+        const offsetY = (Math.random() - 0.5) * 5 + 5;
+        const offsetZ = (Math.random() - 0.5) * 15;
+        
+        const explosionPos = new THREE.Vector3(
+            position.x + offsetX,
+            position.y + offsetY,
+            position.z + offsetZ
+        );
+        
+        // Delay each explosion slightly
+        setTimeout(() => {
+            createExplosion(explosionPos);
+        }, i * 100);
+    }
+    
+    // Create a central larger explosion
+    const explosionGeometry = new THREE.SphereGeometry(2, 8, 8);
+    const explosionMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff5500, 
+        transparent: true,
+        opacity: 0.8
+    });
+    
+    const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+    explosion.position.copy(position);
+    explosion.position.y += 10; // Higher explosion
+    scene.add(explosion);
+    
+    // Add bright light
+    const explosionLight = new THREE.PointLight(0xff5500, 3, 100);
+    explosionLight.position.copy(explosion.position);
+    scene.add(explosionLight);
+    
+    // Animate explosion
+    const startTime = Date.now();
+    const expandAndFade = function() {
+        const elapsedTime = (Date.now() - startTime) / 1000; // seconds
+        
+        if (elapsedTime > 1.0) {
+            // Remove explosion after 1 second
+            scene.remove(explosion);
+            scene.remove(explosionLight);
+            return;
+        }
+        
+        // Scale up explosion
+        const scale = 1 + elapsedTime * 20;
+        explosion.scale.set(scale, scale, scale);
+        
+        // Fade out explosion
+        explosion.material.opacity = 0.8 * (1 - elapsedTime);
+        explosionLight.intensity = 3 * (1 - elapsedTime);
         
         // Continue animation
         requestAnimationFrame(expandAndFade);
