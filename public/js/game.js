@@ -5,6 +5,7 @@ import * as THREE from 'three';
 import { Water } from 'three/addons/objects/Water.js';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { Sky } from 'three/addons/objects/Sky.js';
+import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 
 // Constants for game physics
 const ACCELERATION = 1000; // Reduced for more comfortable acceleration
@@ -324,10 +325,10 @@ function init() {
     }
 }
 
-// Create a super simple track with basic geometry
+// Create track by loading a GLTF model
 function createSimpleEndlessTrack() {
     try {
-        console.log('Creating super simple track...');
+        console.log('Loading track model...');
         
         // Clear any existing track elements
         if (trackBarriers && trackBarriers.length > 0) {
@@ -360,83 +361,178 @@ function createSimpleEndlessTrack() {
             trackLights = [];
         }
         
-        // Create a single large platform for the track
-        const platformGeometry = new THREE.BoxGeometry(500, 10, 10000);
-        const platformMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Bright red
-        const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-        platform.position.set(0, 5, 0); // Position above water
-        scene.add(platform);
-        trackBarriers.push(platform);
+        // Create a loading manager to track progress
+        const loadingManager = new THREE.LoadingManager();
+        loadingManager.onProgress = function(url, itemsLoaded, itemsTotal) {
+            console.log('Loading track: ' + Math.round(itemsLoaded / itemsTotal * 100) + '%');
+        };
         
-        // Create left barrier
-        const leftBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
-        const leftBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Bright green
-        const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
-        leftBarrier.position.set(-260, 25, 0); // Position to the left
-        scene.add(leftBarrier);
-        trackBarriers.push(leftBarrier);
+        loadingManager.onError = function(url) {
+            console.error('Error loading ' + url);
+        };
         
-        // Create right barrier
-        const rightBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
-        const rightBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Bright blue
-        const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
-        rightBarrier.position.set(260, 25, 0); // Position to the right
-        scene.add(rightBarrier);
-        trackBarriers.push(rightBarrier);
+        // Create a temporary track while the model loads
+        createTemporaryTrack();
         
-        // Add lane markings
-        for (let z = -5000; z < 5000; z += 200) {
-            const markingGeometry = new THREE.BoxGeometry(20, 1, 100);
-            const markingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White
-            const marking = new THREE.Mesh(markingGeometry, markingMaterial);
-            marking.position.set(0, 10.1, z); // Position just above the platform
-            scene.add(marking);
-            trackBarriers.push(marking);
-        }
+        // Load the track model
+        const loader = new GLTFLoader(loadingManager);
         
-        // Add billboards
-        for (let z = -4500; z < 4500; z += 1000) {
-            // Left billboard
-            const leftBillboardGeometry = new THREE.BoxGeometry(100, 100, 20);
-            const leftBillboardMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow
-            const leftBillboard = new THREE.Mesh(leftBillboardGeometry, leftBillboardMaterial);
-            leftBillboard.position.set(-350, 50, z);
-            scene.add(leftBillboard);
-            trackBarriers.push(leftBillboard);
-            
-            // Right billboard
-            const rightBillboardGeometry = new THREE.BoxGeometry(100, 100, 20);
-            const rightBillboardMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff }); // Magenta
-            const rightBillboard = new THREE.Mesh(rightBillboardGeometry, rightBillboardMaterial);
-            rightBillboard.position.set(350, 50, z);
-            scene.add(rightBillboard);
-            trackBarriers.push(rightBillboard);
-        }
+        // Try to load from a CDN first
+        const trackUrl = 'https://raw.githubusercontent.com/KwameDeLaFox/aquablitz/main/public/models/track.glb';
         
-        // Add a bright ambient light
-        const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-        scene.add(ambientLight);
-        trackLights.push(ambientLight);
+        loader.load(
+            trackUrl,
+            function(gltf) {
+                console.log('Track model loaded successfully');
+                
+                // Add the model to the scene
+                const trackModel = gltf.scene;
+                
+                // Scale and position the model
+                trackModel.scale.set(10, 10, 10);
+                trackModel.position.set(0, 0, 0);
+                
+                // Add the model to the scene
+                scene.add(trackModel);
+                trackBarriers.push(trackModel);
+                
+                // Extract any lights from the model
+                trackModel.traverse(function(child) {
+                    if (child.isLight) {
+                        trackLights.push(child);
+                    }
+                });
+                
+                // Reset player position to start of track
+                playerBoat.position.set(0, 15, -100);
+                playerBoat.rotation.y = 0; // Face forward
+                
+                // Update camera
+                camera.position.set(0, 100, playerBoat.position.z - 200);
+                controls.target.copy(playerBoat.position);
+                controls.update();
+                
+                // Add global lighting to make track more visible
+                const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
+                scene.add(hemisphereLight);
+                trackLights.push(hemisphereLight);
+                
+                // Add directional light to cast shadows and improve visibility
+                const dirLight = new THREE.DirectionalLight(0xffffff, 1);
+                dirLight.position.set(0, 200, 100);
+                dirLight.castShadow = true;
+                scene.add(dirLight);
+                trackLights.push(dirLight);
+            },
+            function(xhr) {
+                console.log('Track loading progress: ' + (xhr.loaded / xhr.total * 100) + '%');
+            },
+            function(error) {
+                console.error('Error loading track model:', error);
+                // If loading fails, create a basic track
+                createBasicTrack();
+            }
+        );
         
-        // Add directional light
-        const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-        directionalLight.position.set(0, 100, 0);
-        scene.add(directionalLight);
-        trackLights.push(directionalLight);
-        
-        // Reset player position to start of track
-        playerBoat.position.set(0, 15, -4500);
-        playerBoat.rotation.y = 0; // Face forward
-        
-        // Update camera
-        camera.position.set(0, 100, playerBoat.position.z - 200);
-        controls.target.copy(playerBoat.position);
-        controls.update();
-        
-        console.log('Super simple track created successfully');
     } catch (error) {
-        console.error('Error creating super simple track:', error);
+        console.error('Error creating track:', error);
+        // If an error occurs, create a basic track
+        createBasicTrack();
     }
+}
+
+// Create a temporary track while the model loads
+function createTemporaryTrack() {
+    // Create a simple platform
+    const platformGeometry = new THREE.BoxGeometry(500, 10, 1000);
+    const platformMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.position.set(0, 5, 0);
+    scene.add(platform);
+    trackBarriers.push(platform);
+    
+    // Add a loading message
+    const loadingDiv = document.createElement('div');
+    loadingDiv.id = 'loading-message';
+    loadingDiv.style.position = 'absolute';
+    loadingDiv.style.top = '50%';
+    loadingDiv.style.left = '50%';
+    loadingDiv.style.transform = 'translate(-50%, -50%)';
+    loadingDiv.style.color = 'white';
+    loadingDiv.style.fontSize = '24px';
+    loadingDiv.style.fontWeight = 'bold';
+    loadingDiv.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
+    loadingDiv.style.zIndex = '1000';
+    loadingDiv.textContent = 'Loading Track...';
+    document.body.appendChild(loadingDiv);
+    
+    // Remove the loading message after 10 seconds
+    setTimeout(() => {
+        if (document.getElementById('loading-message')) {
+            document.body.removeChild(loadingDiv);
+        }
+    }, 10000);
+}
+
+// Create a basic track if the model fails to load
+function createBasicTrack() {
+    console.log('Creating basic track as fallback...');
+    
+    // Create a single large platform for the track
+    const platformGeometry = new THREE.BoxGeometry(500, 10, 10000);
+    const platformMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Bright red
+    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+    platform.position.set(0, 5, 0); // Position above water
+    scene.add(platform);
+    trackBarriers.push(platform);
+    
+    // Create left barrier
+    const leftBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
+    const leftBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Bright green
+    const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
+    leftBarrier.position.set(-260, 25, 0); // Position to the left
+    scene.add(leftBarrier);
+    trackBarriers.push(leftBarrier);
+    
+    // Create right barrier
+    const rightBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
+    const rightBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Bright blue
+    const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
+    rightBarrier.position.set(260, 25, 0); // Position to the right
+    scene.add(rightBarrier);
+    trackBarriers.push(rightBarrier);
+    
+    // Add lane markings
+    for (let z = -5000; z < 5000; z += 200) {
+        const markingGeometry = new THREE.BoxGeometry(20, 1, 100);
+        const markingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White
+        const marking = new THREE.Mesh(markingGeometry, markingMaterial);
+        marking.position.set(0, 10.1, z); // Position just above the platform
+        scene.add(marking);
+        trackBarriers.push(marking);
+    }
+    
+    // Reset player position to start of track
+    playerBoat.position.set(0, 15, -4500);
+    playerBoat.rotation.y = 0; // Face forward
+    
+    // Update camera
+    camera.position.set(0, 100, playerBoat.position.z - 200);
+    controls.target.copy(playerBoat.position);
+    controls.update();
+    
+    // Add a bright ambient light
+    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+    scene.add(ambientLight);
+    trackLights.push(ambientLight);
+    
+    // Add directional light
+    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+    directionalLight.position.set(0, 100, 0);
+    scene.add(directionalLight);
+    trackLights.push(directionalLight);
+    
+    console.log('Basic track created successfully');
 }
 
 // Handle window resizing
