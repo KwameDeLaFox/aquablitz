@@ -297,7 +297,7 @@ function init() {
         playerBoat.position.set(0, 5, 0);
         scene.add(playerBoat);
 
-        // Create a simple straight endless track
+        // Create a super simple track with basic geometry
         createSimpleEndlessTrack();
 
         // Update initial boat position
@@ -324,18 +324,18 @@ function init() {
     }
 }
 
-// Create a simple straight endless track
+// Create a super simple track with basic geometry
 function createSimpleEndlessTrack() {
     try {
-        console.log('Creating simple endless track...');
+        console.log('Creating super simple track...');
         
         // Clear any existing track elements
-        if (trackBarriers.length > 0) {
+        if (trackBarriers && trackBarriers.length > 0) {
             trackBarriers.forEach(barrier => scene.remove(barrier));
             trackBarriers = [];
         }
         
-        if (checkpoints.length > 0) {
+        if (checkpoints && checkpoints.length > 0) {
             checkpoints.forEach(checkpoint => scene.remove(checkpoint));
             checkpoints = [];
         }
@@ -355,103 +355,77 @@ function createSimpleEndlessTrack() {
             hazards = [];
         }
         
-        // Define a simple straight track
-        const trackLength = 10000; // Very long track
-        const trackWidth = 300;
-        const segmentLength = 500; // Length of each track segment
-        
-        // Create track segments
-        for (let z = -trackLength/2; z < trackLength/2; z += segmentLength) {
-            // Create track segment (road) - make it more visible with brighter color
-            const roadGeometry = new THREE.PlaneGeometry(trackWidth, segmentLength);
-            const roadMaterial = new THREE.MeshStandardMaterial({
-                color: 0x444444, // Lighter gray for better visibility
-                roughness: 0.8,
-                metalness: 0.2,
-                emissive: 0x222222, // Add some emissive for better visibility
-                emissiveIntensity: 0.2
-            });
-            const road = new THREE.Mesh(roadGeometry, roadMaterial);
-            road.rotation.x = -Math.PI / 2;
-            road.position.set(0, WATER_LEVEL + 0.5, z); // Raise it slightly above water
-            scene.add(road);
-            trackBarriers.push(road); // Store for cleanup
-            
-            // Add lane markings - make them brighter and more visible
-            const laneMarkingGeometry = new THREE.PlaneGeometry(10, segmentLength * 0.8); // Wider markings
-            const laneMarkingMaterial = new THREE.MeshBasicMaterial({
-                color: 0xffffff,
-                emissive: 0xffffff,
-                emissiveIntensity: 1.0
-            });
-            const laneMarking = new THREE.Mesh(laneMarkingGeometry, laneMarkingMaterial);
-            laneMarking.rotation.x = -Math.PI / 2;
-            laneMarking.position.set(0, WATER_LEVEL + 0.6, z); // Slightly above road
-            scene.add(laneMarking);
-            trackBarriers.push(laneMarking); // Store for cleanup
-            
-            // Create left barrier - make it taller and more visible
-            const leftBarrierGeometry = new THREE.BoxGeometry(10, 30, segmentLength);
-            const leftBarrierMaterial = new THREE.MeshStandardMaterial({
-                color: 0x00ff88,
-                emissive: 0x00ff88,
-                emissiveIntensity: 0.8, // Increased intensity
-                roughness: 0.3,
-                metalness: 0.7
-            });
-            const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
-            leftBarrier.position.set(-trackWidth/2 - 5, 15, z); // Taller and wider
-            scene.add(leftBarrier);
-            trackBarriers.push(leftBarrier);
-            
-            // Create right barrier - make it taller and more visible
-            const rightBarrierGeometry = new THREE.BoxGeometry(10, 30, segmentLength);
-            const rightBarrierMaterial = new THREE.MeshStandardMaterial({
-                color: 0x00ff88,
-                emissive: 0x00ff88,
-                emissiveIntensity: 0.8, // Increased intensity
-                roughness: 0.3,
-                metalness: 0.7
-            });
-            const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
-            rightBarrier.position.set(trackWidth/2 + 5, 15, z); // Taller and wider
-            scene.add(rightBarrier);
-            trackBarriers.push(rightBarrier);
-            
-            // Add additional lighting for the track segment
-            const trackLight = new THREE.PointLight(0xffffff, 1, 500);
-            trackLight.position.set(0, 50, z);
-            scene.add(trackLight);
-            trackLights.push(trackLight);
-            
-            // Add billboards on alternating sides
-            if (z % (segmentLength * 2) === 0) {
-                // Left side billboard
-                createBillboard(-trackWidth/2 - 80, z, 0); // Further from track
-            } else {
-                // Right side billboard
-                createBillboard(trackWidth/2 + 80, z, 1); // Further from track
-            }
-            
-            // Add checkpoint with more visibility
-            const checkpointGeometry = new THREE.BoxGeometry(trackWidth, 40, 5); // Taller
-            const checkpointMaterial = new THREE.MeshStandardMaterial({
-                color: 0xffff00,
-                emissive: 0xffff00,
-                emissiveIntensity: 0.8, // Increased intensity
-                transparent: true,
-                opacity: 0.5, // More visible
-                roughness: 0.7,
-                metalness: 0.3
-            });
-            const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
-            checkpoint.position.set(0, 20, z + segmentLength/2); // Higher
-            scene.add(checkpoint);
-            checkpoints.push(checkpoint);
+        if (trackLights && trackLights.length > 0) {
+            trackLights.forEach(light => scene.remove(light));
+            trackLights = [];
         }
         
+        // Create a single large platform for the track
+        const platformGeometry = new THREE.BoxGeometry(500, 10, 10000);
+        const platformMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Bright red
+        const platform = new THREE.Mesh(platformGeometry, platformMaterial);
+        platform.position.set(0, 5, 0); // Position above water
+        scene.add(platform);
+        trackBarriers.push(platform);
+        
+        // Create left barrier
+        const leftBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
+        const leftBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Bright green
+        const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
+        leftBarrier.position.set(-260, 25, 0); // Position to the left
+        scene.add(leftBarrier);
+        trackBarriers.push(leftBarrier);
+        
+        // Create right barrier
+        const rightBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
+        const rightBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Bright blue
+        const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
+        rightBarrier.position.set(260, 25, 0); // Position to the right
+        scene.add(rightBarrier);
+        trackBarriers.push(rightBarrier);
+        
+        // Add lane markings
+        for (let z = -5000; z < 5000; z += 200) {
+            const markingGeometry = new THREE.BoxGeometry(20, 1, 100);
+            const markingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White
+            const marking = new THREE.Mesh(markingGeometry, markingMaterial);
+            marking.position.set(0, 10.1, z); // Position just above the platform
+            scene.add(marking);
+            trackBarriers.push(marking);
+        }
+        
+        // Add billboards
+        for (let z = -4500; z < 4500; z += 1000) {
+            // Left billboard
+            const leftBillboardGeometry = new THREE.BoxGeometry(100, 100, 20);
+            const leftBillboardMaterial = new THREE.MeshBasicMaterial({ color: 0xffff00 }); // Yellow
+            const leftBillboard = new THREE.Mesh(leftBillboardGeometry, leftBillboardMaterial);
+            leftBillboard.position.set(-350, 50, z);
+            scene.add(leftBillboard);
+            trackBarriers.push(leftBillboard);
+            
+            // Right billboard
+            const rightBillboardGeometry = new THREE.BoxGeometry(100, 100, 20);
+            const rightBillboardMaterial = new THREE.MeshBasicMaterial({ color: 0xff00ff }); // Magenta
+            const rightBillboard = new THREE.Mesh(rightBillboardGeometry, rightBillboardMaterial);
+            rightBillboard.position.set(350, 50, z);
+            scene.add(rightBillboard);
+            trackBarriers.push(rightBillboard);
+        }
+        
+        // Add a bright ambient light
+        const ambientLight = new THREE.AmbientLight(0xffffff, 2);
+        scene.add(ambientLight);
+        trackLights.push(ambientLight);
+        
+        // Add directional light
+        const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
+        directionalLight.position.set(0, 100, 0);
+        scene.add(directionalLight);
+        trackLights.push(directionalLight);
+        
         // Reset player position to start of track
-        playerBoat.position.set(0, 5, -trackLength/2 + 50);
+        playerBoat.position.set(0, 15, -4500);
         playerBoat.rotation.y = 0; // Face forward
         
         // Update camera
@@ -459,84 +433,10 @@ function createSimpleEndlessTrack() {
         controls.target.copy(playerBoat.position);
         controls.update();
         
-        // Add global lighting to make track more visible
-        const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-        scene.add(hemisphereLight);
-        
-        // Add directional light to cast shadows and improve visibility
-        const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-        dirLight.position.set(0, 200, 100);
-        dirLight.castShadow = true;
-        scene.add(dirLight);
-        
-        console.log('Simple endless track created successfully');
+        console.log('Super simple track created successfully');
     } catch (error) {
-        console.error('Error creating simple endless track:', error);
+        console.error('Error creating super simple track:', error);
     }
-}
-
-// Create a billboard with sponsor logo
-function createBillboard(x, z, type) {
-    // Billboard stand
-    const standGeometry = new THREE.BoxGeometry(15, 80, 15); // Taller and wider
-    const standMaterial = new THREE.MeshStandardMaterial({
-        color: 0x888888,
-        roughness: 0.7,
-        metalness: 0.3
-    });
-    const stand = new THREE.Mesh(standGeometry, standMaterial);
-    stand.position.set(x, 40, z); // Higher
-    scene.add(stand);
-    trackBarriers.push(stand);
-    
-    // Billboard panel
-    const panelGeometry = new THREE.PlaneGeometry(120, 60); // Larger panel
-    
-    // Different billboard designs
-    let panelMaterial;
-    if (type === 0) {
-        // Neon sponsor logo - brighter
-        panelMaterial = new THREE.MeshStandardMaterial({
-            color: 0xff3366,
-            emissive: 0xff3366,
-            emissiveIntensity: 1.0, // Increased intensity
-            roughness: 0.3,
-            metalness: 0.7
-        });
-    } else {
-        // Aqua Blitz logo - brighter
-        panelMaterial = new THREE.MeshStandardMaterial({
-            color: 0x00aaff,
-            emissive: 0x00aaff,
-            emissiveIntensity: 1.0, // Increased intensity
-            roughness: 0.3,
-            metalness: 0.7
-        });
-    }
-    
-    const panel = new THREE.Mesh(panelGeometry, panelMaterial);
-    panel.position.set(x, 80, z); // Higher
-    
-    // Rotate to face the track
-    if (x < 0) {
-        panel.rotation.y = Math.PI / 2;
-    } else {
-        panel.rotation.y = -Math.PI / 2;
-    }
-    
-    scene.add(panel);
-    trackBarriers.push(panel);
-    
-    // Add spotlight to illuminate billboard - brighter
-    const spotLight = new THREE.SpotLight(type === 0 ? 0xff3366 : 0x00aaff, 2); // Increased intensity
-    spotLight.position.set(x, 120, z); // Higher
-    spotLight.target = panel;
-    spotLight.angle = 0.6; // Wider angle
-    spotLight.penumbra = 0.5;
-    spotLight.distance = 200; // Increased range
-    spotLight.intensity = 2; // Brighter
-    scene.add(spotLight);
-    trackLights.push(spotLight);
 }
 
 // Handle window resizing
