@@ -51,6 +51,13 @@ let hazards = [];
 let trackLights = [];
 let debugMode = true; // Enable debugging
 
+// Projectile system variables
+let projectiles = []; // Array to store active projectiles
+const PROJECTILE_SPEED = 300; // Speed of projectiles
+const PROJECTILE_LIFETIME = 3; // Seconds before projectile is removed
+const PROJECTILE_COOLDOWN = 0.5; // Seconds between shots
+let lastShotTime = 0; // Time of the last shot
+
 // Multiplayer
 const socket = io({
     transports: ['websocket'],
@@ -108,6 +115,9 @@ function handleKeyDown(event) {
         case 'Space':
             keys.powerUp = true;
             usePowerUp();
+            break;
+        case 'KeyF': // Add shooting with F key
+            fireProjectile();
             break;
     }
 }
@@ -723,6 +733,9 @@ function update(deltaTime) {
         // Process keyboard input for boat movement
         processBoatMovement(deltaTime);
         
+        // Update projectiles
+        updateProjectiles(deltaTime);
+        
         // Apply water height to boat
         const time = performance.now() * 0.001;
         const waveHeight = Math.sin(time * 0.5 + playerBoat.position.x * 0.01) * 0.5 + 
@@ -744,16 +757,18 @@ function update(deltaTime) {
         
         // Check for checkpoint collisions
         checkpoints.forEach(checkpoint => {
-            const distance = playerBoat.position.distanceTo(checkpoint.position);
-            if (distance < 50) {
-                if (!checkpoint.passed) {
-                    checkpoint.passed = true;
-                    console.log('Checkpoint passed!');
-                    
-                    // Visual feedback
-                    if (checkpoint.object.material) {
-                        checkpoint.object.material.emissive = new THREE.Color(0xffff00);
-                        checkpoint.object.material.emissiveIntensity = 0.5;
+            if (checkpoint.object.material) {
+                const distance = playerBoat.position.distanceTo(checkpoint.position);
+                if (distance < 50) {
+                    if (!checkpoint.passed) {
+                        checkpoint.passed = true;
+                        console.log('Checkpoint passed!');
+                        
+                        // Visual feedback
+                        if (checkpoint.object.material) {
+                            checkpoint.object.material.emissive = new THREE.Color(0xffff00);
+                            checkpoint.object.material.emissiveIntensity = 0.5;
+                        }
                     }
                 }
             }
@@ -1016,4 +1031,173 @@ function animate() {
 
 // Start animation loop immediately (will wait for game start)
 console.log('Starting animation loop...');
-requestAnimationFrame(animate); 
+requestAnimationFrame(animate);
+
+// Create a projectile from the boat
+function fireProjectile() {
+    // Check cooldown to prevent rapid firing
+    const currentTime = Date.now() / 1000; // Current time in seconds
+    if (currentTime - lastShotTime < PROJECTILE_COOLDOWN) {
+        return; // Still in cooldown
+    }
+    
+    // Update last shot time
+    lastShotTime = currentTime;
+    
+    // Create projectile geometry and material
+    const projectileGeometry = new THREE.SphereGeometry(3, 8, 8); // Small sphere
+    const projectileMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff00ff, // Bright magenta color for visibility
+        emissive: 0xff00ff,
+        emissiveIntensity: 1.0
+    });
+    
+    // Create projectile mesh
+    const projectile = new THREE.Mesh(projectileGeometry, projectileMaterial);
+    
+    // Position projectile at the front of the boat
+    // Calculate position in front of the boat based on boat's orientation
+    const frontOffset = new THREE.Vector3(0, 0, 30); // 30 units in front of boat
+    frontOffset.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+    
+    projectile.position.set(
+        playerBoat.position.x + frontOffset.x,
+        playerBoat.position.y + 5, // Slightly above the boat
+        playerBoat.position.z + frontOffset.z
+    );
+    
+    // Set projectile's direction based on boat's orientation
+    const direction = new THREE.Vector3(0, 0, 1); // Forward direction
+    direction.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+    
+    // Add projectile to scene
+    scene.add(projectile);
+    
+    // Add to projectiles array with metadata
+    projectiles.push({
+        object: projectile,
+        direction: direction,
+        creationTime: currentTime,
+        hasCollided: false
+    });
+    
+    // Add visual effect - light
+    const projectileLight = new THREE.PointLight(0xff00ff, 1, 50);
+    projectileLight.position.copy(projectile.position);
+    scene.add(projectileLight);
+    
+    // Add light to projectile object for reference
+    projectile.userData.light = projectileLight;
+    
+    // Add sound effect (if available)
+    // playSound('shoot');
+    
+    console.log('Projectile fired!', projectiles.length, 'active projectiles');
+}
+
+// Update projectiles in the game loop
+function updateProjectiles(deltaTime) {
+    const currentTime = Date.now() / 1000; // Current time in seconds
+    
+    // Update each projectile
+    for (let i = projectiles.length - 1; i >= 0; i--) {
+        const projectile = projectiles[i];
+        
+        // Move projectile forward in its direction
+        projectile.object.position.x += projectile.direction.x * PROJECTILE_SPEED * deltaTime;
+        projectile.object.position.z += projectile.direction.z * PROJECTILE_SPEED * deltaTime;
+        
+        // Make projectile bob slightly up and down for visual effect
+        projectile.object.position.y = playerBoat.position.y + 5 + Math.sin(currentTime * 5) * 1;
+        
+        // Update projectile light position
+        if (projectile.object.userData.light) {
+            projectile.object.userData.light.position.copy(projectile.object.position);
+        }
+        
+        // Check for projectile lifetime
+        if (currentTime - projectile.creationTime > PROJECTILE_LIFETIME) {
+            // Remove projectile
+            scene.remove(projectile.object);
+            // Remove light
+            if (projectile.object.userData.light) {
+                scene.remove(projectile.object.userData.light);
+            }
+            // Remove from array
+            projectiles.splice(i, 1);
+            continue;
+        }
+        
+        // Check for collisions with barriers
+        for (const barrier of barriers) {
+            if (barrier && barrier.position && !projectile.hasCollided) {
+                const distance = projectile.object.position.distanceTo(barrier.position);
+                if (distance < 10) { // Collision threshold
+                    // Mark as collided
+                    projectile.hasCollided = true;
+                    
+                    // Create explosion effect
+                    createExplosion(projectile.object.position);
+                    
+                    // Remove projectile
+                    scene.remove(projectile.object);
+                    // Remove light
+                    if (projectile.object.userData.light) {
+                        scene.remove(projectile.object.userData.light);
+                    }
+                    // Remove from array
+                    projectiles.splice(i, 1);
+                    break;
+                }
+            }
+        }
+    }
+}
+
+// Create an explosion effect at the given position
+function createExplosion(position) {
+    // Create particle system for explosion
+    const explosionGeometry = new THREE.SphereGeometry(1, 4, 4);
+    const explosionMaterial = new THREE.MeshBasicMaterial({ 
+        color: 0xff5500, 
+        transparent: true,
+        opacity: 0.8
+    });
+    
+    // Create explosion mesh
+    const explosion = new THREE.Mesh(explosionGeometry, explosionMaterial);
+    explosion.position.copy(position);
+    scene.add(explosion);
+    
+    // Add light
+    const explosionLight = new THREE.PointLight(0xff5500, 2, 50);
+    explosionLight.position.copy(position);
+    scene.add(explosionLight);
+    
+    // Animate explosion
+    const startTime = Date.now();
+    const expandAndFade = function() {
+        const elapsedTime = (Date.now() - startTime) / 1000; // seconds
+        
+        if (elapsedTime > 0.5) {
+            // Remove explosion after 0.5 seconds
+            scene.remove(explosion);
+            scene.remove(explosionLight);
+            return;
+        }
+        
+        // Scale up explosion
+        const scale = 1 + elapsedTime * 10;
+        explosion.scale.set(scale, scale, scale);
+        
+        // Fade out explosion
+        explosion.material.opacity = 0.8 * (1 - elapsedTime * 2);
+        explosionLight.intensity = 2 * (1 - elapsedTime * 2);
+        
+        // Continue animation
+        requestAnimationFrame(expandAndFade);
+    };
+    
+    // Start animation
+    expandAndFade();
+} 
