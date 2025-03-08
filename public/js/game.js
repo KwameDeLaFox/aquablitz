@@ -696,52 +696,135 @@ function resetPlayerPosition() {
     }
 }
 
-// Update camera position to follow the boat while ensuring camera stays above water
+// Update camera position to follow the boat in a racing-style third-person view
 function updateCameraPosition() {
-    if (playerBoat) {
-        // Position camera behind boat, looking ahead
-        const distance = 150;
-        const minHeight = 50; // Minimum camera height to prevent underwater view
-        
-        // Calculate ideal camera position - behind and above the boat
-        const idealPosition = new THREE.Vector3(
-            playerBoat.position.x,
-            Math.max(playerBoat.position.y + minHeight, WATER_LEVEL + minHeight), // Ensure camera stays well above water
-            playerBoat.position.z - distance
-        );
-        
-        // Smoothly move camera towards ideal position
-        camera.position.lerp(idealPosition, 0.1);
-        
-        // Calculate a look-at point ahead of the boat
-        const lookAtVector = new THREE.Vector3(0, 0, 200);
-        lookAtVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
-        const lookAtPoint = new THREE.Vector3(
-            playerBoat.position.x + lookAtVector.x,
-            playerBoat.position.y + 10,
-            playerBoat.position.z + lookAtVector.z
-        );
-        
-        // Create a new vector to gradually adjust camera's look-at point
-        if (!camera.userData.lookAtPoint) {
-            camera.userData.lookAtPoint = lookAtPoint.clone();
-        } else {
-            camera.userData.lookAtPoint.lerp(lookAtPoint, 0.1);
-        }
-        
-        // Look at the interpolated point
-        camera.lookAt(camera.userData.lookAtPoint);
-        
-        // Update orbit controls if enabled
-        if (controls && controls.enabled) {
-            controls.target.copy(playerBoat.position);
-            controls.update();
-        }
-        
-        // Ensure camera is never underwater
-        if (camera.position.y < WATER_LEVEL + 20) {
-            camera.position.y = WATER_LEVEL + 20;
-        }
+    if (!playerBoat) return;
+    
+    // =========================================================================
+    // 1. CALCULATE DYNAMIC CAMERA PARAMETERS BASED ON BOAT STATE
+    // =========================================================================
+    
+    // Get current boat velocity and speed
+    const boatSpeed = velocity.length();
+    const normalizedSpeed = Math.min(boatSpeed / MAX_SPEED, 1.0); // 0-1 range
+    
+    // Calculate base camera distance and height based on boat speed
+    // Higher speeds = further back and higher camera for better visibility
+    const baseDistance = 150 + normalizedSpeed * 100; // 150-250 units behind
+    const baseHeight = 50 + normalizedSpeed * 50;     // 50-100 units above
+    
+    // Calculate lateral offset for turns (creates a more dynamic racing camera)
+    // This will shift the camera slightly to the side during turns
+    const turnDirection = (keys.left ? 1 : (keys.right ? -1 : 0));
+    const turnIntensity = Math.abs(velocity.x) / 50; // How sharp is the turn
+    const lateralOffset = turnDirection * Math.min(turnIntensity * 30, 50);
+    
+    // Get boat's forward direction vector
+    const boatDirection = new THREE.Vector3(0, 0, 1);
+    boatDirection.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+    
+    // Get boat's right vector for lateral offset
+    const boatRight = new THREE.Vector3(1, 0, 0);
+    boatRight.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+    
+    // =========================================================================
+    // 2. CALCULATE IDEAL CAMERA POSITION
+    // =========================================================================
+    
+    // Calculate position behind the boat based on its orientation
+    const idealPosition = new THREE.Vector3();
+    idealPosition.copy(playerBoat.position);
+    
+    // Move backwards from boat based on boat's orientation and speed
+    idealPosition.sub(boatDirection.clone().multiplyScalar(baseDistance));
+    
+    // Add height to camera
+    idealPosition.y = playerBoat.position.y + baseHeight;
+    
+    // Add lateral offset for turns (sliding camera)
+    idealPosition.add(boatRight.clone().multiplyScalar(lateralOffset));
+    
+    // =========================================================================
+    // 3. CAMERA COLLISION PREVENTION AND GROUND AVOIDANCE
+    // =========================================================================
+    
+    // Ensure camera doesn't go underwater
+    const minimumHeight = WATER_LEVEL + 20;
+    if (idealPosition.y < minimumHeight) {
+        idealPosition.y = minimumHeight;
+    }
+    
+    // Optional: Ray casting for collision detection with environment
+    // This would prevent camera from going inside islands or other objects
+    // Implementation would require raycasting from boat to camera and adjusting position if hit
+    
+    // =========================================================================
+    // 4. APPLY SMOOTHING/DAMPING FOR CAMERA MOVEMENT
+    // =========================================================================
+    
+    // Calculate damping factors based on boat speed and turn rate
+    // Faster speeds = less damping (more responsive camera)
+    // Sharp turns = less damping (quicker response to turns)
+    
+    const positionDamping = Math.max(0.92 - normalizedSpeed * 0.04 - turnIntensity * 0.02, 0.85);
+    const lookDamping = Math.max(0.94 - turnIntensity * 0.03, 0.88);
+    
+    // If camera doesn't exist yet or is far from boat, snap immediately
+    if (!camera.userData.racing) {
+        camera.userData.racing = {
+            currentPosition: idealPosition.clone(),
+            currentLookAt: playerBoat.position.clone()
+        };
+    }
+    
+    // Smoothly interpolate camera position
+    camera.userData.racing.currentPosition.lerp(idealPosition, 1 - positionDamping);
+    camera.position.copy(camera.userData.racing.currentPosition);
+    
+    // =========================================================================
+    // 5. CALCULATE AND SMOOTH LOOK-AT POINT
+    // =========================================================================
+    
+    // Calculate look-at point based on boat position and predictive aiming
+    // Look ahead of the boat based on its speed and direction
+    const lookAheadDistance = 50 + normalizedSpeed * 150; // Look 50-200 units ahead
+    const lookAtTarget = new THREE.Vector3();
+    lookAtTarget.copy(playerBoat.position);
+    lookAtTarget.add(boatDirection.clone().multiplyScalar(lookAheadDistance));
+    
+    // Add slight height offset to look-at point to avoid looking directly at water
+    lookAtTarget.y = playerBoat.position.y + 10;
+    
+    // Smoothly transition the look-at point
+    camera.userData.racing.currentLookAt.lerp(lookAtTarget, 1 - lookDamping);
+    
+    // Apply final camera orientation
+    camera.lookAt(camera.userData.racing.currentLookAt);
+    
+    // =========================================================================
+    // 6. DEBUG VISUALIZATION (optional)
+    // =========================================================================
+    
+    // If debug mode is enabled, we could visualize camera parameters
+    if (debugMode && false) { // Disabled for now
+        console.log('Camera Debug:', {
+            boatSpeed: Math.round(boatSpeed),
+            normalizedSpeed: normalizedSpeed.toFixed(2),
+            cameraDistance: baseDistance.toFixed(2),
+            cameraHeight: baseHeight.toFixed(2),
+            turnIntensity: turnIntensity.toFixed(2),
+            lateralOffset: lateralOffset.toFixed(2)
+        });
+    }
+    
+    // =========================================================================
+    // 7. UPDATE ORBIT CONTROLS (if enabled)
+    // =========================================================================
+    
+    // Update orbit controls if they're being used
+    if (controls && controls.enabled) {
+        controls.target.copy(playerBoat.position);
+        controls.update();
     }
 }
 
