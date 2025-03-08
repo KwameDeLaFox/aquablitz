@@ -297,8 +297,8 @@ function init() {
         playerBoat.position.set(0, 5, 0);
         scene.add(playerBoat);
 
-        // Create the Neon Lagoon track
-        createNeonLagoonTrack();
+        // Create a simple straight endless track
+        createSimpleEndlessTrack();
 
         // Update initial boat position
         playerBoat.position.set(0, 5, 0);
@@ -324,14 +324,198 @@ function init() {
     }
 }
 
-// Create the giant ramp for the "Oh Hell Yeah" moment
-function createGiantRamp() {
-    const rampGeometry = new THREE.BoxGeometry(100, 80, 200);
-    const rampMaterial = new THREE.MeshPhongMaterial({ color: 0x666666 });
-    const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
-    ramp.position.set(0, 40, 500); // Place the ramp ahead of start
-    ramp.rotation.x = -Math.PI / 6; // Angle the ramp up
-    scene.add(ramp);
+// Create a simple straight endless track
+function createSimpleEndlessTrack() {
+    try {
+        console.log('Creating simple endless track...');
+        
+        // Clear any existing track elements
+        if (trackBarriers.length > 0) {
+            trackBarriers.forEach(barrier => scene.remove(barrier));
+            trackBarriers = [];
+        }
+        
+        if (checkpoints.length > 0) {
+            checkpoints.forEach(checkpoint => scene.remove(checkpoint));
+            checkpoints = [];
+        }
+        
+        if (boostPads && boostPads.length > 0) {
+            boostPads.forEach(pad => scene.remove(pad));
+            boostPads = [];
+        }
+        
+        if (waterJets && waterJets.length > 0) {
+            waterJets.forEach(jet => scene.remove(jet));
+            waterJets = [];
+        }
+        
+        if (hazards && hazards.length > 0) {
+            hazards.forEach(hazard => scene.remove(hazard));
+            hazards = [];
+        }
+        
+        // Define a simple straight track
+        const trackLength = 10000; // Very long track
+        const trackWidth = 300;
+        const segmentLength = 500; // Length of each track segment
+        
+        // Create track segments
+        for (let z = -trackLength/2; z < trackLength/2; z += segmentLength) {
+            // Create track segment (road)
+            const roadGeometry = new THREE.PlaneGeometry(trackWidth, segmentLength);
+            const roadMaterial = new THREE.MeshStandardMaterial({
+                color: 0x333333,
+                roughness: 0.8,
+                metalness: 0.2
+            });
+            const road = new THREE.Mesh(roadGeometry, roadMaterial);
+            road.rotation.x = -Math.PI / 2;
+            road.position.set(0, WATER_LEVEL + 0.1, z);
+            scene.add(road);
+            trackBarriers.push(road); // Store for cleanup
+            
+            // Add lane markings
+            const laneMarkingGeometry = new THREE.PlaneGeometry(5, segmentLength * 0.8);
+            const laneMarkingMaterial = new THREE.MeshBasicMaterial({
+                color: 0xffffff
+            });
+            const laneMarking = new THREE.Mesh(laneMarkingGeometry, laneMarkingMaterial);
+            laneMarking.rotation.x = -Math.PI / 2;
+            laneMarking.position.set(0, WATER_LEVEL + 0.2, z);
+            scene.add(laneMarking);
+            trackBarriers.push(laneMarking); // Store for cleanup
+            
+            // Create left barrier
+            const leftBarrierGeometry = new THREE.BoxGeometry(5, 20, segmentLength);
+            const leftBarrierMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00ff88,
+                emissive: 0x00ff88,
+                emissiveIntensity: 0.5,
+                roughness: 0.3,
+                metalness: 0.7
+            });
+            const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
+            leftBarrier.position.set(-trackWidth/2 - 2.5, 10, z);
+            scene.add(leftBarrier);
+            trackBarriers.push(leftBarrier);
+            
+            // Create right barrier
+            const rightBarrierGeometry = new THREE.BoxGeometry(5, 20, segmentLength);
+            const rightBarrierMaterial = new THREE.MeshStandardMaterial({
+                color: 0x00ff88,
+                emissive: 0x00ff88,
+                emissiveIntensity: 0.5,
+                roughness: 0.3,
+                metalness: 0.7
+            });
+            const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
+            rightBarrier.position.set(trackWidth/2 + 2.5, 10, z);
+            scene.add(rightBarrier);
+            trackBarriers.push(rightBarrier);
+            
+            // Add billboards on alternating sides
+            if (z % (segmentLength * 2) === 0) {
+                // Left side billboard
+                createBillboard(-trackWidth/2 - 50, z, 0);
+            } else {
+                // Right side billboard
+                createBillboard(trackWidth/2 + 50, z, 1);
+            }
+            
+            // Add checkpoint
+            const checkpointGeometry = new THREE.BoxGeometry(trackWidth, 20, 5);
+            const checkpointMaterial = new THREE.MeshStandardMaterial({
+                color: 0xffff00,
+                emissive: 0xffff00,
+                emissiveIntensity: 0.3,
+                transparent: true,
+                opacity: 0.3,
+                roughness: 0.7,
+                metalness: 0.3
+            });
+            const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
+            checkpoint.position.set(0, 10, z + segmentLength/2);
+            scene.add(checkpoint);
+            checkpoints.push(checkpoint);
+        }
+        
+        // Reset player position to start of track
+        playerBoat.position.set(0, 5, -trackLength/2 + 50);
+        playerBoat.rotation.y = 0; // Face forward
+        
+        // Update camera
+        camera.position.set(0, 100, playerBoat.position.z - 200);
+        controls.target.copy(playerBoat.position);
+        controls.update();
+        
+        console.log('Simple endless track created successfully');
+    } catch (error) {
+        console.error('Error creating simple endless track:', error);
+    }
+}
+
+// Create a billboard with sponsor logo
+function createBillboard(x, z, type) {
+    // Billboard stand
+    const standGeometry = new THREE.BoxGeometry(10, 50, 10);
+    const standMaterial = new THREE.MeshStandardMaterial({
+        color: 0x888888,
+        roughness: 0.7,
+        metalness: 0.3
+    });
+    const stand = new THREE.Mesh(standGeometry, standMaterial);
+    stand.position.set(x, 25, z);
+    scene.add(stand);
+    trackBarriers.push(stand);
+    
+    // Billboard panel
+    const panelGeometry = new THREE.PlaneGeometry(80, 40);
+    
+    // Different billboard designs
+    let panelMaterial;
+    if (type === 0) {
+        // Neon sponsor logo
+        panelMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff3366,
+            emissive: 0xff3366,
+            emissiveIntensity: 0.8,
+            roughness: 0.3,
+            metalness: 0.7
+        });
+    } else {
+        // Aqua Blitz logo
+        panelMaterial = new THREE.MeshStandardMaterial({
+            color: 0x00aaff,
+            emissive: 0x00aaff,
+            emissiveIntensity: 0.8,
+            roughness: 0.3,
+            metalness: 0.7
+        });
+    }
+    
+    const panel = new THREE.Mesh(panelGeometry, panelMaterial);
+    panel.position.set(x, 50, z);
+    
+    // Rotate to face the track
+    if (x < 0) {
+        panel.rotation.y = Math.PI / 2;
+    } else {
+        panel.rotation.y = -Math.PI / 2;
+    }
+    
+    scene.add(panel);
+    trackBarriers.push(panel);
+    
+    // Add spotlight to illuminate billboard
+    const spotLight = new THREE.SpotLight(type === 0 ? 0xff3366 : 0x00aaff, 1);
+    spotLight.position.set(x, 70, z);
+    spotLight.target = panel;
+    spotLight.angle = 0.5;
+    spotLight.penumbra = 0.5;
+    spotLight.distance = 100;
+    scene.add(spotLight);
+    trackLights.push(spotLight);
 }
 
 // Handle window resizing
@@ -431,125 +615,6 @@ function usePowerUp() {
     hasPowerUp = false;
     powerUpType = null;
     document.getElementById('power-up').textContent = 'NO POWER-UP';
-}
-
-// Create the Neon Lagoon track
-function createNeonLagoonTrack() {
-    // Define track path points (x, z coordinates)
-    const trackPath = [
-        { x: 0, z: 0 },
-        { x: 300, z: 200 },
-        { x: 600, z: 0 },
-        { x: 800, z: -400 },
-        { x: 400, z: -800 },
-        { x: -200, z: -600 },
-        { x: -400, z: -200 },
-        { x: -200, z: 200 }
-    ];
-
-    trackPoints = trackPath;
-
-    // Create glowing barriers
-    const barrierMaterial = new THREE.MeshPhongMaterial({
-        color: 0x00ff88,
-        emissive: 0x00ff88,
-        emissiveIntensity: 0.5,
-        transparent: true,
-        opacity: 0.8
-    });
-
-    // Create track barriers
-    for (let i = 0; i < trackPath.length; i++) {
-        const start = trackPath[i];
-        const end = trackPath[(i + 1) % trackPath.length];
-
-        // Calculate barrier positions
-        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z).normalize();
-        const normal = new THREE.Vector2(-direction.y, direction.x);
-        const length = Math.sqrt(Math.pow(end.x - start.x, 2) + Math.pow(end.z - start.z, 2));
-
-        // Create outer barriers
-        const barrierGeometry = new THREE.BoxGeometry(length, BARRIER_HEIGHT, 5);
-        const leftBarrier = new THREE.Mesh(barrierGeometry, barrierMaterial);
-        const rightBarrier = new THREE.Mesh(barrierGeometry.clone(), barrierMaterial);
-
-        // Position barriers
-        const angle = Math.atan2(direction.y, direction.x);
-        const midX = (start.x + end.x) / 2;
-        const midZ = (start.z + end.z) / 2;
-
-        leftBarrier.position.set(
-            midX + normal.x * TRACK_WIDTH/2,
-            BARRIER_HEIGHT/2,
-            midZ + normal.y * TRACK_WIDTH/2
-        );
-        rightBarrier.position.set(
-            midX - normal.x * TRACK_WIDTH/2,
-            BARRIER_HEIGHT/2,
-            midZ - normal.y * TRACK_WIDTH/2
-        );
-
-        leftBarrier.rotation.y = angle;
-        rightBarrier.rotation.y = angle;
-
-        scene.add(leftBarrier);
-        scene.add(rightBarrier);
-        trackBarriers.push(leftBarrier, rightBarrier);
-    }
-
-    // Create checkpoints
-    const checkpointMaterial = new THREE.MeshPhongMaterial({
-        color: 0xff3366,
-        transparent: true,
-        opacity: 0.3
-    });
-
-    for (let i = 0; i < trackPath.length; i++) {
-        const start = trackPath[i];
-        const end = trackPath[(i + 1) % trackPath.length];
-        const direction = new THREE.Vector2(end.x - start.x, end.z - start.z).normalize();
-        const midX = (start.x + end.x) / 2;
-        const midZ = (start.z + end.z) / 2;
-
-        const checkpointGeometry = new THREE.BoxGeometry(5, BARRIER_HEIGHT * 1.5, TRACK_WIDTH);
-        const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
-        
-        checkpoint.position.set(midX, BARRIER_HEIGHT/2, midZ);
-        checkpoint.rotation.y = Math.atan2(direction.y, direction.x);
-        
-        scene.add(checkpoint);
-        checkpoints.push(checkpoint);
-    }
-
-    // Add ramps at specific points
-    addRamps(trackPath);
-}
-
-// Add ramps to the track
-function addRamps(trackPath) {
-    const rampMaterial = new THREE.MeshPhongMaterial({
-        color: 0x3366ff,
-        emissive: 0x3366ff,
-        emissiveIntensity: 0.3
-    });
-
-    // Add ramps at specific track segments
-    const rampPositions = [2, 5]; // Indices of track segments to add ramps
-    
-    rampPositions.forEach(index => {
-        const start = trackPath[index];
-        const end = trackPath[(index + 1) % trackPath.length];
-        const midX = (start.x + end.x) / 2;
-        const midZ = (start.z + end.z) / 2;
-
-        const rampGeometry = new THREE.BoxGeometry(80, 40, TRACK_WIDTH * 0.8);
-        const ramp = new THREE.Mesh(rampGeometry, rampMaterial);
-        
-        ramp.position.set(midX, 20, midZ);
-        ramp.rotation.x = -Math.PI / 8; // Angle the ramp up
-        
-        scene.add(ramp);
-    });
 }
 
 // Update game state
@@ -692,6 +757,43 @@ function update() {
                     }
                 }
             }
+        }
+        
+        // Handle endless track - teleport back to start if reached the end
+        if (playerBoat.position.z > 4900) { // Near the end of the track
+            console.log('Reached end of track, teleporting back to start');
+            // Fade out
+            const fadeOverlay = document.createElement('div');
+            fadeOverlay.style.position = 'absolute';
+            fadeOverlay.style.top = '0';
+            fadeOverlay.style.left = '0';
+            fadeOverlay.style.width = '100%';
+            fadeOverlay.style.height = '100%';
+            fadeOverlay.style.backgroundColor = 'black';
+            fadeOverlay.style.opacity = '0';
+            fadeOverlay.style.transition = 'opacity 1s';
+            fadeOverlay.style.zIndex = '1001';
+            document.body.appendChild(fadeOverlay);
+            
+            // Fade in
+            setTimeout(() => {
+                fadeOverlay.style.opacity = '1';
+                
+                // Teleport after fade
+                setTimeout(() => {
+                    playerBoat.position.z = -4900; // Back to start
+                    
+                    // Fade out
+                    setTimeout(() => {
+                        fadeOverlay.style.opacity = '0';
+                        
+                        // Remove overlay
+                        setTimeout(() => {
+                            document.body.removeChild(fadeOverlay);
+                        }, 1000);
+                    }, 500);
+                }, 1000);
+            }, 0);
         }
     } catch (error) {
         console.error('Error in update function:', error);
