@@ -60,12 +60,13 @@ let lastShotTime = 0; // Time of the last shot
 
 // Enemy boat system variables
 let enemyBoats = []; // Array to store enemy boats
-const ENEMY_COUNT = 3; // Number of enemy boats to create
+const ENEMY_COUNT = 12; // Increased from 3 to 12 for open world
 const ENEMY_SPEED = 120; // Base speed of enemy boats
 const ENEMY_DETECTION_RANGE = 500; // Distance at which enemies detect the player
 const ENEMY_ATTACK_RANGE = 300; // Distance at which enemies will attack the player
 const ENEMY_TURN_SPEED = 1.0; // How fast enemies can turn
 const ENEMY_HEALTH = 3; // Number of hits required to destroy an enemy boat
+const WORLD_SIZE = 5000; // Half-width/length of the open world area
 
 // Multiplayer
 const socket = io({
@@ -176,7 +177,6 @@ function init() {
         // Create scene with brighter sky
         scene = new THREE.Scene();
         scene.background = new THREE.Color(0xaaccff); // Even lighter blue sky
-        scene.fog = new THREE.FogExp2(0xaaccff, 0.0002); // Less dense fog
         
         // Create camera
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
@@ -274,9 +274,9 @@ function init() {
         controls.maxDistance = 1000;
         controls.enabled = false; // Start with controls disabled
         
-        // Create simplified track
-        createSimplifiedTrack();
-        console.log('Track created');
+        // Create open world environment instead of track
+        createOpenWorldEnvironment();
+        console.log('Open world created');
         
         // Create enemy boats
         createEnemyBoats();
@@ -301,6 +301,9 @@ function init() {
             startTime = Date.now();
             resetPlayerPosition();
         });
+        
+        // Add minimap
+        createMinimap();
         
         // Start animation loop
         console.log('Starting animation loop...');
@@ -384,10 +387,10 @@ function createPlayerBoat() {
     }
 }
 
-// Create a simplified track inspired by VibeSail's minimalist style
-function createSimplifiedTrack() {
+// Replace the track creation with open world environment
+function createOpenWorldEnvironment() {
     try {
-        console.log('Creating simplified track...');
+        console.log('Creating open world environment...');
         
         // Clear any existing track elements
         if (trackElements) {
@@ -402,277 +405,286 @@ function createSimplifiedTrack() {
         hazards = [];
         trackLights = [];
         
-        // Track parameters
-        const trackLength = 10000;
-        const raceCourseWidth = 300;
+        // Create ambient global lighting for open world
+        const ambientWorldLight = new THREE.AmbientLight(0xffffff, 0.3);
+        scene.add(ambientWorldLight);
+        trackElements.push(ambientWorldLight);
         
-        // Define track boundary - helpful for debugging
-        const trackBounds = new THREE.Box3(
-            new THREE.Vector3(-raceCourseWidth/2, WATER_LEVEL, -trackLength/2),
-            new THREE.Vector3(raceCourseWidth/2, WATER_LEVEL + 50, trackLength/2)
-        );
+        // Add directional light to simulate sun
+        const sunLight = new THREE.DirectionalLight(0xffffcc, 1);
+        sunLight.position.set(200, 500, 200);
+        scene.add(sunLight);
+        trackElements.push(sunLight);
         
-        // Create transparent track area marker for better visibility without affecting visuals
-        const trackAreaGeometry = new THREE.BoxGeometry(raceCourseWidth, 0.1, trackLength);
-        const trackAreaMaterial = new THREE.MeshBasicMaterial({ 
-            color: 0xffffff, 
-            transparent: true, 
-            opacity: 0.05,
-            depthWrite: false // Important to prevent z-fighting
-        });
+        // Create scattered islands throughout the world
+        const islandCount = 25; // More islands for open world
+        for (let i = 0; i < islandCount; i++) {
+            const islandX = (Math.random() - 0.5) * WORLD_SIZE * 2;
+            const islandZ = (Math.random() - 0.5) * WORLD_SIZE * 2;
+            createIsland(islandX, islandZ);
+        }
         
-        const trackArea = new THREE.Mesh(trackAreaGeometry, trackAreaMaterial);
-        trackArea.position.set(0, WATER_LEVEL + 0.1, 0); // Slightly above water
-        scene.add(trackArea);
-        trackElements.push(trackArea);
-        
-        // Create buoys to mark race course - using basic materials to avoid rendering issues
-        const buoyCount = 30;
-        const buoySpacing = trackLength / buoyCount;
-        
+        // Add some navigation buoys scattered around
+        const buoyCount = 40;
         for (let i = 0; i < buoyCount; i++) {
-            const z = buoySpacing * i - trackLength/2 + buoySpacing/2;
+            const buoyX = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
+            const buoyZ = (Math.random() - 0.5) * WORLD_SIZE * 1.8;
             
-            // Left buoys (red)
-            createBuoy(-raceCourseWidth/2, z, 0xff3333);
-            
-            // Right buoys (green)
-            createBuoy(raceCourseWidth/2, z, 0x33ff33);
+            // Alternate colors for variety
+            const buoyColor = i % 2 === 0 ? 0xff3333 : 0x33ff33;
+            createBuoy(buoyX, buoyZ, buoyColor);
         }
         
-        // Create start/finish line
-        createStartFinishLine(-trackLength/2 + 100, raceCourseWidth);
+        // Create a "world boundary" visual indicator
+        createWorldBoundary();
         
-        // Create checkpoints with basic materials
-        const checkpointCount = 8;
-        const checkpointSpacing = trackLength / checkpointCount;
-        
-        for (let i = 1; i < checkpointCount; i++) {
-            createSimpleCheckpoint(0, checkpointSpacing * i - trackLength/2, raceCourseWidth);
-        }
-        
-        // Add some islands for scenery (like VibeSail)
-        // Keep islands away from the race course to prevent rendering issues
-        for (let i = 0; i < 5; i++) {
-            // Place islands far from track to avoid interference
-            const xOffset = (Math.random() > 0.5 ? 1 : -1) * (raceCourseWidth + 200 + Math.random() * 1000);
-            const zPos = (Math.random() - 0.5) * trackLength;
-            createIsland(xOffset, zPos);
-        }
-        
-        // Add subtle ambient light to track area instead of point lights
-        const trackLight = new THREE.AmbientLight(0xffffff, 0.3);
-        scene.add(trackLight);
-        trackElements.push(trackLight);
-        
-        // Set player position
+        // Set player position near center
         resetPlayerPosition();
         
-        console.log('Track created with:', {
-            "Elements": trackElements.length,
-            "Buoys": barriers.length,
-            "Checkpoints": checkpoints.length
+        console.log('Open world created with:', {
+            "Islands": islandCount,
+            "Buoys": buoyCount,
+            "World Size": WORLD_SIZE
         });
     } catch (error) {
-        console.error('Error creating track:', error);
+        console.error('Error creating open world:', error);
     }
 }
 
-// Create a simplified buoy inspired by VibeSail - using basic materials
-function createBuoy(x, z, color) {
-    // Use simple geometry and basic material for better performance
-    const buoyGeometry = new THREE.CylinderGeometry(3, 3, 6, 8);
-    const buoyMaterial = new THREE.MeshBasicMaterial({
-        color: color
-    });
-    
-    const buoy = new THREE.Mesh(buoyGeometry, buoyMaterial);
-    buoy.position.set(x, WATER_LEVEL + 3, z);
-    scene.add(buoy);
-    trackElements.push(buoy);
-    barriers.push(buoy);
-    
-    // Add simple pole
-    const poleGeometry = new THREE.CylinderGeometry(0.5, 0.5, 10, 8);
-    const poleMaterial = new THREE.MeshBasicMaterial({
-        color: 0xdddddd
-    });
-    
-    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
-    pole.position.set(x, WATER_LEVEL + 11, z);
-    scene.add(pole);
-    trackElements.push(pole);
-    
-    // Use simpler light with limited radius
-    const pointLight = new THREE.PointLight(color, 0.3, 30);
-    pointLight.position.set(x, WATER_LEVEL + 16, z);
-    scene.add(pointLight);
-    trackElements.push(pointLight);
-    trackLights.push(pointLight);
-}
-
-// Create start/finish line
-function createStartFinishLine(z, width) {
-    // Create flags
-    const flagHeight = 40;
-    
-    // Left flag
-    const leftFlagGeometry = new THREE.CylinderGeometry(1, 1, flagHeight, 8);
-    const flagMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.5
-    });
-    
-    const leftFlag = new THREE.Mesh(leftFlagGeometry, flagMaterial);
-    leftFlag.position.set(-width/2 - 10, WATER_LEVEL + flagHeight/2, z);
-    scene.add(leftFlag);
-    trackElements.push(leftFlag);
-    
-    // Right flag
-    const rightFlag = new THREE.Mesh(leftFlagGeometry, flagMaterial);
-    rightFlag.position.set(width/2 + 10, WATER_LEVEL + flagHeight/2, z);
-    scene.add(rightFlag);
-    trackElements.push(rightFlag);
-    
-    // Banner
-    const bannerGeometry = new THREE.BoxGeometry(width + 30, 10, 2);
-    const bannerMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffffff,
-        roughness: 0.5,
-        emissive: 0x333333,
-        emissiveIntensity: 0.2
-    });
-    
-    const banner = new THREE.Mesh(bannerGeometry, bannerMaterial);
-    banner.position.set(0, WATER_LEVEL + flagHeight, z);
-    scene.add(banner);
-    trackElements.push(banner);
-    
-    // Add as a checkpoint
-    checkpoints.push({
-        object: banner,
-        position: new THREE.Vector3(0, WATER_LEVEL, z),
-        passed: false
-    });
-    
-    // Add light
-    const light = new THREE.PointLight(0xffffff, 1, 100);
-    light.position.set(0, WATER_LEVEL + flagHeight, z);
-    scene.add(light);
-    trackElements.push(light);
-    trackLights.push(light);
-}
-
-// Create simplified checkpoint
-function createSimpleCheckpoint(x, z, width) {
-    // Just create two vertical poles with a light connecting them
-    const poleHeight = 25;
-    const poleGeometry = new THREE.CylinderGeometry(1, 1, poleHeight, 8);
-    const poleMaterial = new THREE.MeshStandardMaterial({
-        color: 0xffcc00,
-        roughness: 0.5
-    });
-    
-    // Left pole
-    const leftPole = new THREE.Mesh(poleGeometry, poleMaterial);
-    leftPole.position.set(x - width/2, WATER_LEVEL + poleHeight/2, z);
-    scene.add(leftPole);
-    trackElements.push(leftPole);
-    
-    // Right pole
-    const rightPole = new THREE.Mesh(poleGeometry, poleMaterial);
-    rightPole.position.set(x + width/2, WATER_LEVEL + poleHeight/2, z);
-    scene.add(rightPole);
-    trackElements.push(rightPole);
-    
-    // Checkpoint indicator (invisible plane)
-    const checkpointGeometry = new THREE.PlaneGeometry(width, 30);
-    const checkpointMaterial = new THREE.MeshBasicMaterial({
-        color: 0xffcc00,
+// Create a visual boundary for the world
+function createWorldBoundary() {
+    // Create a very large cylinder to mark the edge of the world
+    const boundaryGeometry = new THREE.CylinderGeometry(WORLD_SIZE * 1.4, WORLD_SIZE * 1.4, 100, 64, 1, true);
+    const boundaryMaterial = new THREE.MeshBasicMaterial({
+        color: 0x0088ff,
         transparent: true,
-        opacity: 0.1,
+        opacity: 0.15,
         side: THREE.DoubleSide
     });
     
-    const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
-    checkpoint.rotation.x = Math.PI / 2;
-    checkpoint.position.set(x, WATER_LEVEL + 15, z);
-    scene.add(checkpoint);
-    trackElements.push(checkpoint);
+    const boundary = new THREE.Mesh(boundaryGeometry, boundaryMaterial);
+    boundary.position.set(0, WATER_LEVEL + 50, 0);
+    scene.add(boundary);
+    trackElements.push(boundary);
     
-    // Add to checkpoints array
-    checkpoints.push({
-        object: checkpoint,
-        position: new THREE.Vector3(x, WATER_LEVEL, z),
-        passed: false
-    });
-    
-    // Add light
-    const light = new THREE.PointLight(0xffcc00, 0.8, 100);
-    light.position.set(x, WATER_LEVEL + poleHeight, z);
-    scene.add(light);
-    trackElements.push(light);
-    trackLights.push(light);
+    // Add some fog near the boundary
+    scene.fog = new THREE.FogExp2(0xaaccff, 0.00008);
 }
 
-// Create island for scenery (inspired by VibeSail's minimal islands)
+// Create more diverse and realistic islands
 function createIsland(x, z) {
-    // Base island
-    const islandGeometry = new THREE.CylinderGeometry(Math.random() * 100 + 50, Math.random() * 150 + 100, 20, 16);
-    const islandMaterial = new THREE.MeshStandardMaterial({
-        color: 0xddddbb,
-        roughness: 0.9
-    });
+    // Randomly determine island size
+    const islandSize = Math.random() * 150 + 50;
+    const islandHeight = Math.random() * 60 + 20;
+    
+    // Create main island body
+    const islandGeometry = new THREE.CylinderGeometry(
+        islandSize * 0.7, // Top radius (smaller for sloped beach)
+        islandSize,       // Bottom radius
+        islandHeight,
+        12,               // Segments
+        3                 // Height segments
+    );
+    
+    // Choose from a variety of island types
+    let islandMaterial;
+    const islandType = Math.floor(Math.random() * 3);
+    
+    if (islandType === 0) {
+        // Sandy beach island
+        islandMaterial = new THREE.MeshStandardMaterial({
+            color: 0xddddbb,
+            roughness: 0.9
+        });
+    } else if (islandType === 1) {
+        // Rocky island
+        islandMaterial = new THREE.MeshStandardMaterial({
+            color: 0x888888,
+            roughness: 0.7
+        });
+    } else {
+        // Grassy island
+        islandMaterial = new THREE.MeshStandardMaterial({
+            color: 0x447755,
+            roughness: 0.8
+        });
+    }
     
     const island = new THREE.Mesh(islandGeometry, islandMaterial);
     island.position.set(x, WATER_LEVEL - 5, z);
     scene.add(island);
     trackElements.push(island);
+    barriers.push(island); // Add to barriers for collision
     
-    // Add some vegetation
-    if (Math.random() > 0.5) {
-        const treeCount = Math.floor(Math.random() * 5) + 1;
+    // Add some vegetation or features based on island type
+    const featureCount = Math.floor(Math.random() * 8) + 3;
+    
+    for (let i = 0; i < featureCount; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const distance = Math.random() * islandSize * 0.6;
+        const featureX = x + Math.cos(angle) * distance;
+        const featureZ = z + Math.sin(angle) * distance;
         
-        for (let i = 0; i < treeCount; i++) {
-            const treeAngle = Math.random() * Math.PI * 2;
-            const treeDistance = Math.random() * 50;
-            const treeX = x + Math.cos(treeAngle) * treeDistance;
-            const treeZ = z + Math.sin(treeAngle) * treeDistance;
+        if (islandType === 0 || islandType === 2) {
+            // Add trees to sandy or grassy islands
+            createTree(featureX, featureZ);
+        } else {
+            // Add rocks to rocky islands
+            createRock(featureX, featureZ);
+        }
+    }
+    
+    // Add a structure to some islands
+    if (Math.random() > 0.7) {
+        createIslandStructure(x, z, islandSize);
+    }
+}
+
+// Create a rock formation
+function createRock(x, z) {
+    const rockSize = Math.random() * 10 + 5;
+    const rockGeometry = new THREE.DodecahedronGeometry(rockSize, 1);
+    const rockMaterial = new THREE.MeshStandardMaterial({
+        color: 0x777777,
+        roughness: 0.9
+    });
+    
+    const rock = new THREE.Mesh(rockGeometry, rockMaterial);
+    rock.position.set(x, WATER_LEVEL + rockSize/2, z);
+    rock.rotation.x = Math.random() * Math.PI;
+    rock.rotation.y = Math.random() * Math.PI;
+    rock.rotation.z = Math.random() * Math.PI;
+    scene.add(rock);
+    trackElements.push(rock);
+}
+
+// Create structures on some islands
+function createIslandStructure(x, z, islandSize) {
+    const structureType = Math.floor(Math.random() * 3);
+    
+    if (structureType === 0) {
+        // Lighthouse
+        const towerHeight = 70;
+        const towerRadius = 10;
+        
+        // Tower
+        const towerGeometry = new THREE.CylinderGeometry(towerRadius-2, towerRadius, towerHeight, 16);
+        const towerMaterial = new THREE.MeshStandardMaterial({
+            color: 0xffffff,
+            roughness: 0.7
+        });
+        
+        const tower = new THREE.Mesh(towerGeometry, towerMaterial);
+        tower.position.set(x, WATER_LEVEL + towerHeight/2 + 10, z);
+        scene.add(tower);
+        trackElements.push(tower);
+        
+        // Top lantern
+        const lanternGeometry = new THREE.CylinderGeometry(towerRadius+2, towerRadius-2, 10, 16);
+        const lanternMaterial = new THREE.MeshStandardMaterial({
+            color: 0xff0000,
+            emissive: 0xff0000,
+            emissiveIntensity: 0.5,
+            transparent: true,
+            opacity: 0.9
+        });
+        
+        const lantern = new THREE.Mesh(lanternGeometry, lanternMaterial);
+        lantern.position.set(x, WATER_LEVEL + towerHeight + 15, z);
+        scene.add(lantern);
+        trackElements.push(lantern);
+        
+        // Add light
+        const beaconLight = new THREE.PointLight(0xff9900, 1, 300);
+        beaconLight.position.set(x, WATER_LEVEL + towerHeight + 15, z);
+        scene.add(beaconLight);
+        trackElements.push(beaconLight);
+        trackLights.push(beaconLight);
+        
+    } else if (structureType === 1) {
+        // Dock/pier
+        const pierLength = islandSize * 0.8;
+        const pierWidth = 15;
+        
+        const pierGeometry = new THREE.BoxGeometry(pierWidth, 5, pierLength);
+        const pierMaterial = new THREE.MeshStandardMaterial({
+            color: 0x885533,
+            roughness: 0.8
+        });
+        
+        // Choose a random angle for the pier
+        const angle = Math.random() * Math.PI * 2;
+        const pierX = x + Math.cos(angle) * (islandSize * 0.4);
+        const pierZ = z + Math.sin(angle) * (islandSize * 0.4);
+        
+        const pier = new THREE.Mesh(pierGeometry, pierMaterial);
+        pier.position.set(pierX, WATER_LEVEL + 2.5, pierZ);
+        pier.rotation.y = angle;
+        scene.add(pier);
+        trackElements.push(pier);
+        
+        // Add some posts
+        const postCount = 6;
+        for (let i = 0; i < postCount; i++) {
+            const postGeometry = new THREE.CylinderGeometry(2, 2, 10, 8);
+            const post = new THREE.Mesh(postGeometry, pierMaterial);
             
-            createTree(treeX, treeZ);
+            const offset = (i / (postCount-1) - 0.5) * pierLength;
+            const postX = pierX + Math.sin(angle) * offset;
+            const postZ = pierZ - Math.cos(angle) * offset;
+            
+            post.position.set(postX, WATER_LEVEL + 5, postZ);
+            scene.add(post);
+            trackElements.push(post);
+        }
+        
+    } else {
+        // Small settlement
+        const buildingCount = Math.floor(Math.random() * 3) + 2;
+        
+        for (let i = 0; i < buildingCount; i++) {
+            const angle = Math.random() * Math.PI * 2;
+            const distance = Math.random() * islandSize * 0.5;
+            const buildingX = x + Math.cos(angle) * distance;
+            const buildingZ = z + Math.sin(angle) * distance;
+            
+            const buildingWidth = Math.random() * 15 + 20;
+            const buildingDepth = Math.random() * 15 + 20;
+            const buildingHeight = Math.random() * 10 + 15;
+            
+            // Main building
+            const buildingGeometry = new THREE.BoxGeometry(buildingWidth, buildingHeight, buildingDepth);
+            const buildingMaterial = new THREE.MeshStandardMaterial({
+                color: Math.random() > 0.5 ? 0xdddddd : 0xddbbaa,
+                roughness: 0.8
+            });
+            
+            const building = new THREE.Mesh(buildingGeometry, buildingMaterial);
+            building.position.set(buildingX, WATER_LEVEL + buildingHeight/2 + 10, buildingZ);
+            building.rotation.y = Math.random() * Math.PI;
+            scene.add(building);
+            trackElements.push(building);
+            
+            // Roof
+            const roofGeometry = new THREE.ConeGeometry(Math.sqrt(buildingWidth*buildingWidth + buildingDepth*buildingDepth)/2, 10, 4);
+            const roofMaterial = new THREE.MeshStandardMaterial({
+                color: 0xaa3333,
+                roughness: 0.8
+            });
+            
+            const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+            roof.position.set(buildingX, WATER_LEVEL + buildingHeight + 15, buildingZ);
+            roof.rotation.y = Math.random() * Math.PI / 2;
+            scene.add(roof);
+            trackElements.push(roof);
         }
     }
 }
 
-// Create simple tree
-function createTree(x, z) {
-    const trunkGeometry = new THREE.CylinderGeometry(2, 3, 30, 8);
-    const trunkMaterial = new THREE.MeshStandardMaterial({
-        color: 0x885533,
-        roughness: 0.8
-    });
-    
-    const trunk = new THREE.Mesh(trunkGeometry, trunkMaterial);
-    trunk.position.set(x, WATER_LEVEL + 15, z);
-    scene.add(trunk);
-    trackElements.push(trunk);
-    
-    const topGeometry = new THREE.ConeGeometry(10, 20, 8);
-    const topMaterial = new THREE.MeshStandardMaterial({
-        color: 0x227722,
-        roughness: 0.8
-    });
-    
-    const top = new THREE.Mesh(topGeometry, topMaterial);
-    top.position.set(x, WATER_LEVEL + 40, z);
-    scene.add(top);
-    trackElements.push(top);
-}
-
 function resetPlayerPosition() {
     if (playerBoat) {
-        // Position at the start of the track
-        playerBoat.position.set(0, WATER_LEVEL + 5, -4500);
+        // Position near the center of the world
+        playerBoat.position.set(0, WATER_LEVEL + 5, 0);
         playerBoat.rotation.y = 0;
         
         // Reset physics
@@ -740,7 +752,7 @@ function onWindowResize() {
     renderer.setSize(window.innerWidth, window.innerHeight);
 }
 
-// Update function for game logic
+// Update function for game logic - add world boundary checks
 function update(deltaTime) {
     try {
         // Process keyboard input for boat movement
@@ -767,28 +779,39 @@ function update(deltaTime) {
         // Update camera to follow player
         updateCameraPosition();
         
+        // Update minimap
+        updateMinimap();
+        
+        // Apply world boundary limits - slow down near edges
+        const distanceFromCenter = new THREE.Vector2(playerBoat.position.x, playerBoat.position.z).length();
+        if (distanceFromCenter > WORLD_SIZE * 0.9) {
+            // Apply resistance force proportional to how close to boundary
+            const boundaryFactor = (distanceFromCenter - WORLD_SIZE * 0.9) / (WORLD_SIZE * 0.1);
+            velocity.multiplyScalar(1 - boundaryFactor * 0.1);
+            
+            // Apply force pushing back towards center
+            const pushBackDirection = new THREE.Vector3(-playerBoat.position.x, 0, -playerBoat.position.z).normalize();
+            velocity.add(pushBackDirection.multiplyScalar(boundaryFactor * 10 * deltaTime));
+            
+            // Visual warning when near boundary
+            if (distanceFromCenter > WORLD_SIZE * 0.95) {
+                const minimap = document.getElementById('minimap');
+                if (minimap) {
+                    minimap.style.borderColor = '#ff0000';
+                    minimap.style.boxShadow = '0 0 10px #ff0000';
+                }
+            } else {
+                const minimap = document.getElementById('minimap');
+                if (minimap) {
+                    minimap.style.borderColor = 'white';
+                    minimap.style.boxShadow = 'none';
+                }
+            }
+        }
+        
         // Update speed display
         const speed = velocity.length();
         document.getElementById('speed-meter').textContent = `${Math.round(speed)} KPH`;
-        
-        // Check for checkpoint collisions
-        checkpoints.forEach(checkpoint => {
-            if (checkpoint.object.material) {
-                const distance = playerBoat.position.distanceTo(checkpoint.position);
-                if (distance < 50) {
-                    if (!checkpoint.passed) {
-                        checkpoint.passed = true;
-                        console.log('Checkpoint passed!');
-                        
-                        // Visual feedback
-                        if (checkpoint.object.material) {
-                            checkpoint.object.material.emissive = new THREE.Color(0xffff00);
-                            checkpoint.object.material.emissiveIntensity = 0.5;
-                        }
-                    }
-                }
-            }
-        });
         
         // Check for buoy collisions (simplified)
         barriers.forEach(barrier => {
@@ -1275,11 +1298,8 @@ function createEnemyBoats() {
     });
     enemyBoats = [];
     
-    const trackLength = 10000;
-    const trackWidth = 300;
-    
     // Create enemy boats with different colors and positions
-    const enemyColors = [0xff0000, 0x0000ff, 0xaa00aa]; // Red, Blue, Purple
+    const enemyColors = [0xff0000, 0x0000ff, 0xaa00aa, 0xff8800, 0x00aaaa, 0xffaa00]; // More variety
     
     for (let i = 0; i < ENEMY_COUNT; i++) {
         // Create enemy boat
@@ -1294,9 +1314,11 @@ function createEnemyBoats() {
         
         const enemyBoat = new THREE.Mesh(boatGeometry, boatMaterial);
         
-        // Calculate spawn position along the track, with some randomization
-        const spawnZ = -trackLength/2 + (trackLength * (i + 1) / (ENEMY_COUNT + 1)) + (Math.random() * 300 - 150);
-        const spawnX = (Math.random() - 0.5) * trackWidth * 0.8; // Within 80% of track width
+        // Distribute enemies throughout the world
+        const spawnDistance = Math.random() * WORLD_SIZE * 0.8; // Within 80% of world boundary
+        const spawnAngle = Math.random() * Math.PI * 2;
+        const spawnX = Math.cos(spawnAngle) * spawnDistance;
+        const spawnZ = Math.sin(spawnAngle) * spawnDistance;
         
         enemyBoat.position.set(spawnX, WATER_LEVEL + 5, spawnZ);
         enemyBoat.rotation.y = Math.random() * Math.PI * 2; // Random initial rotation
@@ -1322,9 +1344,9 @@ function createEnemyBoats() {
             acceleration: new THREE.Vector3(0, 0, 0),
             state: 'patrolling', // patrolling, chasing, attacking
             patrolPoint: new THREE.Vector3(
-                spawnX + (Math.random() - 0.5) * 200,
+                spawnX + (Math.random() - 0.5) * 400,
                 WATER_LEVEL + 5,
-                spawnZ + (Math.random() - 0.5) * 200
+                spawnZ + (Math.random() - 0.5) * 400
             ),
             patrolDirection: 1,
             nextPatrolChange: Date.now() + 5000 + Math.random() * 5000, // 5-10 seconds
@@ -1553,4 +1575,87 @@ function createLargeExplosion(position) {
     
     // Start animation
     expandAndFade();
+}
+
+// Create a simple minimap
+function createMinimap() {
+    const minimap = document.createElement('div');
+    minimap.id = 'minimap';
+    minimap.style.position = 'absolute';
+    minimap.style.bottom = '20px';
+    minimap.style.right = '20px';
+    minimap.style.width = '150px';
+    minimap.style.height = '150px';
+    minimap.style.backgroundColor = 'rgba(0, 100, 170, 0.5)';
+    minimap.style.border = '2px solid white';
+    minimap.style.borderRadius = '50%';
+    minimap.style.overflow = 'hidden';
+    
+    document.body.appendChild(minimap);
+    
+    // Player marker
+    const playerMarker = document.createElement('div');
+    playerMarker.id = 'player-marker';
+    playerMarker.style.position = 'absolute';
+    playerMarker.style.width = '6px';
+    playerMarker.style.height = '6px';
+    playerMarker.style.backgroundColor = 'white';
+    playerMarker.style.borderRadius = '50%';
+    playerMarker.style.transform = 'translate(-50%, -50%)';
+    minimap.appendChild(playerMarker);
+    
+    // Enemy markers container
+    const enemyMarkersContainer = document.createElement('div');
+    enemyMarkersContainer.id = 'enemy-markers';
+    minimap.appendChild(enemyMarkersContainer);
+}
+
+// Update minimap with current positions
+function updateMinimap() {
+    const minimap = document.getElementById('minimap');
+    if (!minimap) return;
+    
+    const minimapSize = 150;
+    const worldScale = minimapSize / (WORLD_SIZE * 2);
+    
+    // Update player marker
+    const playerMarker = document.getElementById('player-marker');
+    if (playerMarker && playerBoat) {
+        // Calculate position relative to minimap
+        const playerX = (playerBoat.position.x + WORLD_SIZE) * worldScale;
+        const playerZ = (playerBoat.position.z + WORLD_SIZE) * worldScale;
+        
+        playerMarker.style.left = `${playerX}px`;
+        playerMarker.style.top = `${playerZ}px`;
+    }
+    
+    // Update or create enemy markers
+    const enemyMarkersContainer = document.getElementById('enemy-markers');
+    if (enemyMarkersContainer) {
+        // Clear previous markers
+        enemyMarkersContainer.innerHTML = '';
+        
+        // Create markers for each enemy
+        enemyBoats.forEach((enemy, index) => {
+            if (enemy.isDestroyed || !enemy.boat) return;
+            
+            const marker = document.createElement('div');
+            marker.className = 'enemy-marker';
+            marker.style.position = 'absolute';
+            marker.style.width = '4px';
+            marker.style.height = '4px';
+            marker.style.backgroundColor = 'red';
+            marker.style.borderRadius = '50%';
+            marker.style.transform = 'translate(-50%, -50%)';
+            
+            // Calculate position relative to minimap
+            const enemyX = (enemy.boat.position.x + WORLD_SIZE) * worldScale;
+            const enemyZ = (enemy.boat.position.z + WORLD_SIZE) * worldScale;
+            
+            marker.style.left = `${enemyX}px`;
+            marker.style.top = `${enemyZ}px`;
+            
+            enemyMarkersContainer.appendChild(marker);
+        });
+    }
 } 
