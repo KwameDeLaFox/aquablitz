@@ -156,8 +156,8 @@ function init() {
         
         // Create scene
         scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x001133); // Dark blue sky like VibeSail
-        scene.fog = new THREE.FogExp2(0x001133, 0.0005);
+        scene.background = new THREE.Color(0x88aaff); // Lighter blue sky
+        scene.fog = new THREE.FogExp2(0x88aaff, 0.0002); // Less dense fog
         
         // Create camera
         camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
@@ -649,28 +649,51 @@ function resetPlayerPosition() {
     }
 }
 
+// Update camera position to follow the boat while ensuring camera stays above water
 function updateCameraPosition() {
     if (playerBoat) {
         // Position camera behind boat, looking ahead
         const distance = 150;
-        const height = 70;
+        const minHeight = 50; // Minimum camera height to prevent underwater view
         
-        camera.position.set(
+        // Calculate ideal camera position - behind and above the boat
+        const idealPosition = new THREE.Vector3(
             playerBoat.position.x,
-            playerBoat.position.y + height,
+            Math.max(playerBoat.position.y + minHeight, WATER_LEVEL + minHeight), // Ensure camera stays well above water
             playerBoat.position.z - distance
         );
         
-        // Look at the boat with slight offset forward
-        camera.lookAt(
-            playerBoat.position.x,
+        // Smoothly move camera towards ideal position
+        camera.position.lerp(idealPosition, 0.1);
+        
+        // Calculate a look-at point ahead of the boat
+        const lookAtVector = new THREE.Vector3(0, 0, 200);
+        lookAtVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+        const lookAtPoint = new THREE.Vector3(
+            playerBoat.position.x + lookAtVector.x,
             playerBoat.position.y + 10,
-            playerBoat.position.z + 50
+            playerBoat.position.z + lookAtVector.z
         );
         
-        if (controls) {
+        // Create a new vector to gradually adjust camera's look-at point
+        if (!camera.userData.lookAtPoint) {
+            camera.userData.lookAtPoint = lookAtPoint.clone();
+        } else {
+            camera.userData.lookAtPoint.lerp(lookAtPoint, 0.1);
+        }
+        
+        // Look at the interpolated point
+        camera.lookAt(camera.userData.lookAtPoint);
+        
+        // Update orbit controls if enabled
+        if (controls && controls.enabled) {
             controls.target.copy(playerBoat.position);
             controls.update();
+        }
+        
+        // Ensure camera is never underwater
+        if (camera.position.y < WATER_LEVEL + 20) {
+            camera.position.y = WATER_LEVEL + 20;
         }
     }
 }
@@ -917,7 +940,22 @@ socket.on('powerUpEffect', (data) => {
     }
 });
 
-// Animation loop
+// Make sure the water animation doesn't cause rendering issues
+function updateWater(deltaTime) {
+    if (water && water.material) {
+        water.material.uniforms['time'].value += deltaTime * WAVE_SPEED;
+        
+        // Ensure water stays at WATER_LEVEL
+        water.position.y = WATER_LEVEL;
+        
+        // Limit distortion to prevent visual glitches
+        const maxDistortion = 5.0;
+        water.material.uniforms['distortionScale'].value = 
+            Math.min(WATER_DISTORTION_SCALE, maxDistortion);
+    }
+}
+
+// Update animate function to include water update
 function animate() {
     try {
         requestAnimationFrame(animate);
@@ -925,12 +963,22 @@ function animate() {
         // Calculate delta time for smooth movement
         deltaTime = clock.getDelta();
         
-        // Update water
-        water.material.uniforms['time'].value += deltaTime * WAVE_SPEED;
+        // Update water with separate function
+        updateWater(deltaTime);
         
         // Update game state
         if (gameStarted) {
             update(deltaTime);
+        }
+        
+        // Ensure fog color matches sky color - prevents blue screen issue
+        if (scene && scene.fog) {
+            const fogColor = new THREE.Color(0x001133);
+            if (scene.background) {
+                scene.fog.color.copy(scene.background);
+            } else {
+                scene.fog.color.copy(fogColor);
+            }
         }
         
         // Render scene
