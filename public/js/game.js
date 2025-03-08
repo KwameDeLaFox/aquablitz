@@ -73,45 +73,111 @@ document.addEventListener('DOMContentLoaded', () => {
     
     console.log('Start button found, adding click listener');
     
+    // Track all currently pressed keys
+    const pressedKeys = new Set();
+    
     // Add a direct keyboard test that directly updates speed
     window.addEventListener('keydown', function(e) {
         console.log('Direct keydown test:', e.key);
         
-        // Directly update speed and HUD
-        if (e.key === 'ArrowUp' || e.key === 'w' || e.key === 'W') {
-            // Gradually increase speed instead of setting it directly
-            speed = Math.min(speed + 50, 500); // Increment by 50 up to 500
+        // Add key to pressed keys set
+        pressedKeys.add(e.key);
+        
+        // Process all currently pressed keys
+        processKeys(pressedKeys, speedMeter);
+    });
+    
+    window.addEventListener('keyup', function(e) {
+        console.log('Direct keyup test:', e.key);
+        
+        // Remove key from pressed keys set
+        pressedKeys.delete(e.key);
+    });
+    
+    // Process all currently pressed keys
+    function processKeys(pressedKeys, speedMeter) {
+        // Check for forward/backward movement
+        if (pressedKeys.has('ArrowUp') || pressedKeys.has('w') || pressedKeys.has('W')) {
+            // Gradually increase speed
+            speed = Math.min(speed + 50, 500);
             speedMeter.textContent = `DIRECT: ${Math.round(speed)} KPH`;
             speedMeter.style.color = 'red';
-            console.log('Gradually increased speed to:', speed);
             
-            // Smoother boat movement
+            // Move boat forward
             if (playerBoat) {
                 const forwardVector = new THREE.Vector3(0, 0, 1);
                 forwardVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
-                forwardVector.multiplyScalar(5); // Move 5 units instead of 10 for smoother movement
+                forwardVector.multiplyScalar(5);
                 playerBoat.position.add(forwardVector);
-                console.log('Smoothly moved boat to:', playerBoat.position);
             }
         }
         
-        // Directly update turning with smoother rotation
-        if (e.key === 'ArrowLeft' || e.key === 'a' || e.key === 'A') {
+        if (pressedKeys.has('ArrowDown') || pressedKeys.has('s') || pressedKeys.has('S')) {
+            // Gradually decrease speed
+            speed = Math.max(speed - 50, -200);
+            speedMeter.textContent = `REVERSE: ${Math.abs(Math.round(speed))} KPH`;
+            speedMeter.style.color = 'orange';
+            
+            // Move boat backward
             if (playerBoat) {
-                playerBoat.rotation.y += 0.05; // Reduced rotation increment for smoother turning
-                speedMeter.textContent = `TURNING LEFT: ${Math.round(playerBoat.rotation.y * 57.3)} degrees`;
+                const backwardVector = new THREE.Vector3(0, 0, -1);
+                backwardVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
+                backwardVector.multiplyScalar(2);
+                playerBoat.position.add(backwardVector);
+            }
+        }
+        
+        // Check for turning
+        if (pressedKeys.has('ArrowLeft') || pressedKeys.has('a') || pressedKeys.has('A')) {
+            if (playerBoat) {
+                playerBoat.rotation.y += 0.05;
+                if (!speedMeter.textContent.includes('TURNING')) {
+                    speedMeter.textContent += ' TURNING LEFT';
+                }
                 speedMeter.style.color = 'blue';
             }
         }
         
-        if (e.key === 'ArrowRight' || e.key === 'd' || e.key === 'D') {
+        if (pressedKeys.has('ArrowRight') || pressedKeys.has('d') || pressedKeys.has('D')) {
             if (playerBoat) {
-                playerBoat.rotation.y -= 0.05; // Reduced rotation increment for smoother turning
-                speedMeter.textContent = `TURNING RIGHT: ${Math.round(playerBoat.rotation.y * 57.3)} degrees`;
+                playerBoat.rotation.y -= 0.05;
+                if (!speedMeter.textContent.includes('TURNING')) {
+                    speedMeter.textContent += ' TURNING RIGHT';
+                }
                 speedMeter.style.color = 'green';
             }
         }
-    });
+        
+        // Update camera to follow boat
+        if (playerBoat && camera && controls) {
+            controls.target.lerp(playerBoat.position, 0.05);
+            const idealCameraPosition = new THREE.Vector3(
+                playerBoat.position.x - Math.sin(playerBoat.rotation.y) * 200,
+                100 + Math.sin(Date.now() * 0.001) * 5,
+                playerBoat.position.z - Math.cos(playerBoat.rotation.y) * 200
+            );
+            camera.position.lerp(idealCameraPosition, 0.03);
+            controls.update();
+            
+            // Render the scene
+            if (renderer && scene) {
+                renderer.render(scene, camera);
+            }
+        }
+    }
+    
+    // Set up an animation loop for smooth keyboard handling
+    let keyboardAnimationId = null;
+    
+    function animateKeyboardInput() {
+        if (pressedKeys.size > 0) {
+            processKeys(pressedKeys, speedMeter);
+        }
+        keyboardAnimationId = requestAnimationFrame(animateKeyboardInput);
+    }
+    
+    // Start the keyboard animation loop
+    animateKeyboardInput();
     
     startBtn.addEventListener('click', () => {
         console.log('Start button clicked');
@@ -504,21 +570,21 @@ function update() {
         // More responsive boat physics with smoother acceleration
         if (keys.forward) {
             // Smoother acceleration
-            speed += ACCELERATION * delta * 0.5; // Reduced for smoother acceleration
+            speed += ACCELERATION * delta * 0.3; // Further reduced for smoother acceleration
             console.log('Accelerating, new speed:', Math.round(speed));
             // Direct update of HUD for testing
             speedMeter.textContent = `FORWARD: ${Math.abs(Math.round(speed))} KPH`;
             speedMeter.style.color = 'lime';
         } else if (keys.backward) {
             // Smoother braking
-            speed -= ACCELERATION * delta * 0.3; // Reduced for smoother braking
+            speed -= ACCELERATION * delta * 0.2; // Further reduced for smoother braking
             console.log('Braking, new speed:', Math.round(speed));
             // Direct update of HUD for testing
             speedMeter.textContent = `BACKWARD: ${Math.abs(Math.round(speed))} KPH`;
             speedMeter.style.color = 'orange';
         } else {
             // Smoother deceleration
-            speed *= 0.98; // Less aggressive deceleration
+            speed *= 0.99; // Even less aggressive deceleration
             // Direct update of HUD for testing
             speedMeter.textContent = `COASTING: ${Math.abs(Math.round(speed))} KPH`;
         }
@@ -529,16 +595,24 @@ function update() {
 
         // Smoother turning with less aggressive rotation
         const turnMultiplier = Math.abs(speed) / MAX_SPEED; // Turn better at higher speeds
+        
+        // Store previous rotation for smooth interpolation
+        const prevRotation = playerBoat.rotation.y;
+        
         if (keys.left) {
             // Smoother turning
-            playerBoat.rotation.y += TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.2);
+            const targetRotation = prevRotation + TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.2);
+            // Use lerp for smoother rotation
+            playerBoat.rotation.y = THREE.MathUtils.lerp(prevRotation, targetRotation, 0.5);
             console.log('Turning left, rotation:', playerBoat.rotation.y);
             // Update HUD for turning
             speedMeter.textContent += ' TURNING LEFT';
         }
         if (keys.right) {
             // Smoother turning
-            playerBoat.rotation.y -= TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.2);
+            const targetRotation = prevRotation - TURN_SPEED * (isDrifting ? DRIFT_FACTOR : 1) * delta * (turnMultiplier + 0.2);
+            // Use lerp for smoother rotation
+            playerBoat.rotation.y = THREE.MathUtils.lerp(prevRotation, targetRotation, 0.5);
             console.log('Turning right, rotation:', playerBoat.rotation.y);
             // Update HUD for turning
             speedMeter.textContent += ' TURNING RIGHT';
@@ -549,15 +623,18 @@ function update() {
         velocity.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
         
         // Smoother banking with less aggressive tilt
-        const bankAmount = (keys.left ? 1 : (keys.right ? -1 : 0)) * Math.abs(speed) / MAX_SPEED * 0.15;
-        // Lerp for smoother rotation transitions
-        playerBoat.rotation.z = THREE.MathUtils.lerp(playerBoat.rotation.z, bankAmount, 0.1);
+        const bankAmount = (keys.left ? 1 : (keys.right ? -1 : 0)) * Math.abs(speed) / MAX_SPEED * 0.1; // Further reduced
+        // Lerp for smoother rotation transitions with higher factor
+        playerBoat.rotation.z = THREE.MathUtils.lerp(playerBoat.rotation.z, bankAmount, 0.05);
         
         // Store previous position for logging
         const prevPosition = playerBoat.position.clone();
         
-        // Update position
-        playerBoat.position.add(velocity);
+        // Calculate target position
+        const targetPosition = prevPosition.clone().add(velocity);
+        
+        // Use lerp for smoother position updates
+        playerBoat.position.lerp(targetPosition, 0.8); // High factor but not direct assignment
         
         console.log('Boat moved from', 
             prevPosition.x.toFixed(2), 
@@ -570,20 +647,20 @@ function update() {
         );
 
         // Smoother bobbing effect
-        const bobHeight = Math.sin(Date.now() * 0.002) * 0.3; // Reduced frequency and amplitude
-        playerBoat.position.y = THREE.MathUtils.lerp(playerBoat.position.y, 5 + bobHeight, 0.1);
+        const bobHeight = Math.sin(Date.now() * 0.001) * 0.2; // Further reduced frequency and amplitude
+        playerBoat.position.y = THREE.MathUtils.lerp(playerBoat.position.y, 5 + bobHeight, 0.05);
 
         // Camera follows boat more smoothly with increased lerp factor
-        controls.target.lerp(playerBoat.position, 0.05); // Reduced for smoother following
+        controls.target.lerp(playerBoat.position, 0.03); // Further reduced for smoother following
         
         // Position camera behind boat with smoother transitions
         const idealCameraPosition = new THREE.Vector3(
             playerBoat.position.x - Math.sin(playerBoat.rotation.y) * 200,
-            100 + Math.sin(Date.now() * 0.001) * 5, // Slight vertical movement
+            100 + Math.sin(Date.now() * 0.0005) * 3, // Even slower vertical movement
             playerBoat.position.z - Math.cos(playerBoat.rotation.y) * 200
         );
         
-        camera.position.lerp(idealCameraPosition, 0.03); // Reduced for smoother camera movement
+        camera.position.lerp(idealCameraPosition, 0.02); // Further reduced for smoother camera movement
         controls.update();
 
         // Update UI
@@ -675,9 +752,51 @@ function addManualUpdateButton() {
     
     // Add smooth movement with animation
     let smoothMoveInterval = null;
+    let smoothPathPoints = [];
+    let currentPathIndex = 0;
+    let isMovingSmooth = false;
+    
+    // Create a figure-8 path for smooth movement
+    function createSmoothPath() {
+        smoothPathPoints = [];
+        const centerX = playerBoat.position.x;
+        const centerZ = playerBoat.position.z;
+        const radius = 200;
+        
+        // Create a figure-8 path with 100 points
+        for (let i = 0; i < 200; i++) {
+            const t = i / 200 * Math.PI * 4; // 2 full loops
+            const x = centerX + radius * Math.sin(t);
+            const z = centerZ + radius * Math.sin(t * 2) * 0.5; // Figure-8 pattern
+            smoothPathPoints.push(new THREE.Vector3(x, playerBoat.position.y, z));
+        }
+        
+        currentPathIndex = 0;
+    }
     
     smoothButton.addEventListener('click', function() {
         console.log('Smooth move button clicked');
+        
+        // Toggle smooth movement
+        if (isMovingSmooth) {
+            // Stop smooth movement
+            if (smoothMoveInterval) {
+                clearInterval(smoothMoveInterval);
+                smoothMoveInterval = null;
+            }
+            isMovingSmooth = false;
+            smoothButton.textContent = 'SMOOTH MOVE';
+            smoothButton.style.backgroundColor = '#00aa00';
+            return;
+        }
+        
+        // Start smooth movement
+        isMovingSmooth = true;
+        smoothButton.textContent = 'STOP SMOOTH';
+        smoothButton.style.backgroundColor = '#aa0000';
+        
+        // Create a smooth path
+        createSmoothPath();
         
         // Clear any existing interval
         if (smoothMoveInterval) {
@@ -686,18 +805,28 @@ function addManualUpdateButton() {
         
         // Set up smooth movement
         smoothMoveInterval = setInterval(function() {
-            if (playerBoat) {
+            if (playerBoat && smoothPathPoints.length > 0) {
+                // Get next point on path
+                const targetPoint = smoothPathPoints[currentPathIndex];
+                currentPathIndex = (currentPathIndex + 1) % smoothPathPoints.length;
+                
+                // Calculate direction to next point
+                const direction = new THREE.Vector3().subVectors(targetPoint, playerBoat.position).normalize();
+                
+                // Calculate rotation to face direction
+                const targetRotation = Math.atan2(direction.x, direction.z);
+                
+                // Smoothly rotate towards target rotation
+                const rotationDiff = targetRotation - playerBoat.rotation.y;
+                // Normalize the rotation difference to be between -PI and PI
+                const normalizedRotationDiff = ((rotationDiff + Math.PI) % (Math.PI * 2)) - Math.PI;
+                playerBoat.rotation.y += normalizedRotationDiff * 0.1; // Smooth rotation
+                
                 // Gradually increase speed
-                speed = Math.min(speed + 10, 300);
+                speed = Math.min(speed + 5, 300);
                 
-                // Move forward smoothly
-                const forwardVector = new THREE.Vector3(0, 0, 1);
-                forwardVector.applyAxisAngle(new THREE.Vector3(0, 1, 0), playerBoat.rotation.y);
-                forwardVector.multiplyScalar(1); // Very small increment for smooth movement
-                playerBoat.position.add(forwardVector);
-                
-                // Slight rotation for a curved path
-                playerBoat.rotation.y += 0.01;
+                // Move towards target point
+                playerBoat.position.lerp(targetPoint, 0.05);
                 
                 // Update HUD
                 const speedMeter = document.getElementById('speed-meter');
@@ -722,14 +851,6 @@ function addManualUpdateButton() {
                 }
             }
         }, 16); // ~60fps
-        
-        // Stop after 5 seconds
-        setTimeout(function() {
-            if (smoothMoveInterval) {
-                clearInterval(smoothMoveInterval);
-                smoothMoveInterval = null;
-            }
-        }, 5000);
     });
     
     document.body.appendChild(updateButton);
