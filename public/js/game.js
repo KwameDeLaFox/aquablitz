@@ -204,335 +204,589 @@ document.addEventListener('DOMContentLoaded', () => {
 
 // Initialize Three.js scene
 function init() {
-    try {
-        console.log('Initializing scene...');
-        
-        // Scene setup
-        scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x001133); // Darker background
-        scene.fog = new THREE.Fog(0x001133, 1000, 4000);
-
-        // Camera
-        camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
-        camera.position.set(0, 100, -200); // Higher and further back
-        camera.lookAt(0, 0, 0);
-
-        // Renderer
-        renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setPixelRatio(window.devicePixelRatio);
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        renderer.toneMapping = THREE.ACESFilmicToneMapping;
-        renderer.toneMappingExposure = 0.5; // Reduce overall brightness
-        document.body.appendChild(renderer.domElement);
-
-        // Lighting
-        const ambientLight = new THREE.AmbientLight(0xffffff, 0.3); // Reduced ambient light
-        scene.add(ambientLight);
-        
-        const sunLight = new THREE.DirectionalLight(0xffffff, 1.0);
-        sunLight.position.set(100, 100, 100);
-        sunLight.castShadow = true;
-        scene.add(sunLight);
-
-        // Add point lights for the track
-        const pointLight1 = new THREE.PointLight(0x00ff88, 1, 1000);
-        pointLight1.position.set(0, 50, 0);
-        scene.add(pointLight1);
-
-        const pointLight2 = new THREE.PointLight(0x0088ff, 1, 1000);
-        pointLight2.position.set(400, 50, -400);
-        scene.add(pointLight2);
-
-        // Water
-        const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE, 512, 512);
-        const textureLoader = new THREE.TextureLoader();
-        
-        const waterNormals = textureLoader.load('textures/waternormals.jpg', function(texture) {
-            texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
-            texture.repeat.set(6, 6);
-        });
-        
-        water = new Water(waterGeometry, {
-            textureWidth: 512,
-            textureHeight: 512,
-            waterNormals: waterNormals,
-            sunDirection: new THREE.Vector3(0.5, 0.5, 0),
+    // Create the scene
+    scene = new THREE.Scene();
+    
+    // Add fog for atmospheric effect and distance cue
+    scene.fog = new THREE.FogExp2(0x0080ff, 0.00025);
+    
+    // Create camera
+    camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 1, 20000);
+    camera.position.set(0, 100, -250);
+    camera.lookAt(0, 0, 0);
+    
+    // Create renderer
+    renderer = new THREE.WebGLRenderer({ antialias: true });
+    renderer.setPixelRatio(window.devicePixelRatio);
+    renderer.setSize(window.innerWidth, window.innerHeight);
+    renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    renderer.toneMappingExposure = 0.5;
+    document.body.appendChild(renderer.domElement);
+    
+    // Create directional light (sun)
+    const sun = new THREE.DirectionalLight(0xffffff, 1.5);
+    sun.position.set(500, 500, -500);
+    sun.castShadow = true;
+    scene.add(sun);
+    
+    // Add ambient light
+    const ambientLight = new THREE.AmbientLight(0x404040, 2.5);
+    scene.add(ambientLight);
+    
+    // Water
+    const waterGeometry = new THREE.PlaneGeometry(WATER_SIZE, WATER_SIZE);
+    water = new Water(
+        waterGeometry,
+        {
+            textureWidth: 1024,
+            textureHeight: 1024,
+            waterNormals: new THREE.TextureLoader().load('textures/waternormals.jpg', function (texture) {
+                texture.wrapS = texture.wrapT = THREE.RepeatWrapping;
+            }),
+            sunDirection: new THREE.Vector3(),
             sunColor: 0xffffff,
-            waterColor: 0x001e0f,
+            waterColor: 0x00aaff,
             distortionScale: WATER_DISTORTION_SCALE,
-            fog: scene.fog !== undefined
-        });
-        
-        water.rotation.x = -Math.PI / 2;
-        water.position.y = WATER_LEVEL;
-        scene.add(water);
-
-        // Add sky
-        const sky = new Sky();
-        sky.scale.setScalar(10000);
-        scene.add(sky);
-
-        const skyUniforms = sky.material.uniforms;
-        skyUniforms['turbidity'].value = 10;
-        skyUniforms['rayleigh'].value = 2;
-        skyUniforms['mieCoefficient'].value = 0.005;
-        skyUniforms['mieDirectionalG'].value = 0.8;
-
-        const sun = new THREE.Vector3();
-        const pmremGenerator = new THREE.PMREMGenerator(renderer);
-
-        const phi = THREE.MathUtils.degToRad(60);
-        const theta = THREE.MathUtils.degToRad(180);
-        sun.setFromSphericalCoords(1, phi, theta);
-
-        sky.material.uniforms['sunPosition'].value.copy(sun);
-        water.material.uniforms['sunDirection'].value.copy(sun).normalize();
-
+            fog: scene.fog !== undefined,
+            alpha: WATER_ALPHA
+        }
+    );
+    water.rotation.x = -Math.PI / 2;
+    water.position.y = WATER_LEVEL;
+    scene.add(water);
+    
+    // Sky
+    const sky = new Sky();
+    sky.scale.setScalar(10000);
+    scene.add(sky);
+    
+    const skyUniforms = sky.material.uniforms;
+    skyUniforms['turbidity'].value = 10;
+    skyUniforms['rayleigh'].value = 2;
+    skyUniforms['mieCoefficient'].value = 0.005;
+    skyUniforms['mieDirectionalG'].value = 0.8;
+    
+    const parameters = {
+        elevation: 10,
+        azimuth: 180
+    };
+    
+    const pmremGenerator = new THREE.PMREMGenerator(renderer);
+    
+    function updateSun() {
+        const phi = THREE.MathUtils.degToRad(90 - parameters.elevation);
+        const theta = THREE.MathUtils.degToRad(parameters.azimuth);
+        sun.position.setFromSphericalCoords(1000, phi, theta);
+        sky.material.uniforms['sunPosition'].value.copy(sun.position);
+        water.material.uniforms['sunDirection'].value.copy(sun.position).normalize();
         scene.environment = pmremGenerator.fromScene(sky).texture;
-        pmremGenerator.dispose();
-
-        // Temporary boat (box for now)
-        const boatGeometry = new THREE.BoxGeometry(20, 10, 40);
-        const boatMaterial = new THREE.MeshPhongMaterial({ color: 0x00ff88 });
-        playerBoat = new THREE.Mesh(boatGeometry, boatMaterial);
-        playerBoat.position.set(0, 5, 0);
-        scene.add(playerBoat);
-
-        // Create a super simple track with basic geometry
-        createSimpleEndlessTrack();
-
-        // Update initial boat position
-        playerBoat.position.set(0, 5, 0);
-
-        // Controls
-        controls = new OrbitControls(camera, renderer.domElement);
-        controls.enablePan = false;
-        controls.maxPolarAngle = Math.PI * 0.495;
-        controls.minDistance = 100;
-        controls.maxDistance = 1000;
-        controls.target.copy(playerBoat.position);
-        controls.update();
-
-        // Clock for frame-independent movement
-        clock = new THREE.Clock();
-
-        // Event listeners
-        window.addEventListener('resize', onWindowResize);
-        
-        console.log('Scene initialized successfully');
-    } catch (error) {
-        console.error('Error initializing scene:', error);
     }
+    updateSun();
+    
+    // Add orbit controls for debugging
+    controls = new OrbitControls(camera, renderer.domElement);
+    controls.maxPolarAngle = Math.PI * 0.495;
+    controls.minDistance = 100;
+    controls.maxDistance = 1000;
+    controls.enabled = false; // Start with controls disabled
+    
+    // Create player boat
+    createPlayerBoat();
+    
+    // Create the race track immediately
+    createBoatRacingTrack();
+    
+    // Handle window resize
+    window.addEventListener('resize', onWindowResize);
+    
+    // Handle keyboard input
+    document.addEventListener('keydown', function (event) {
+        pressedKeys[event.code] = true;
+    });
+    
+    document.addEventListener('keyup', function (event) {
+        pressedKeys[event.code] = false;
+    });
+    
+    // Add UI event listeners
+    document.getElementById('start-btn').addEventListener('click', function () {
+        document.getElementById('lobby').classList.add('hidden');
+        // Enable controls after starting
+        controls.enabled = false;
+        gameStarted = true;
+        startTime = Date.now();
+        resetPlayerPosition();
+    });
+    
+    // For smoother movement
+    requestAnimationFrame(animate);
+    
+    // Add the manual update button for testing
+    addManualUpdateButton();
 }
 
 // Create track by loading a GLTF model
-function createSimpleEndlessTrack() {
-    try {
-        console.log('Loading track model...');
+function createBoatRacingTrack() {
+    // Clear any existing track elements
+    if (trackElements) {
+        trackElements.forEach(element => scene.remove(element));
+    }
+    
+    trackElements = [];
+    barriers = [];
+    checkpoints = [];
+    boostPads = [];
+    waterJets = [];
+    hazards = [];
+    trackLights = [];
+    
+    console.log("Creating boat racing track...");
+    
+    // Track dimensions and parameters
+    const trackLength = 10000;
+    const trackWidth = 500; // Wider for boat racing
+    const waterChannelWidth = 300; // Water channel in the middle
+    const sideWidth = (trackWidth - waterChannelWidth) / 2;
+    
+    // Create the main water channel (slightly raised above the main water)
+    const waterChannelGeometry = new THREE.BoxGeometry(waterChannelWidth, 3, trackLength);
+    const waterChannelMaterial = new THREE.MeshStandardMaterial({
+        color: 0x0088ff,
+        metalness: 0.9,
+        roughness: 0.1,
+        emissive: 0x003366,
+        emissiveIntensity: 0.5,
+        transparent: true,
+        opacity: 0.8
+    });
+    
+    const waterChannel = new THREE.Mesh(waterChannelGeometry, waterChannelMaterial);
+    waterChannel.position.set(0, WATER_LEVEL + 1.5, 0); // Slightly above the main water
+    scene.add(waterChannel);
+    trackElements.push(waterChannel);
+    
+    // Create side platforms (docks/piers)
+    const leftPlatformGeometry = new THREE.BoxGeometry(sideWidth, 5, trackLength);
+    const rightPlatformGeometry = new THREE.BoxGeometry(sideWidth, 5, trackLength);
+    
+    const platformMaterial = new THREE.MeshStandardMaterial({
+        color: 0x885533, // Wood color
+        roughness: 0.8,
+        metalness: 0.1
+    });
+    
+    const leftPlatform = new THREE.Mesh(leftPlatformGeometry, platformMaterial);
+    leftPlatform.position.set(-waterChannelWidth/2 - sideWidth/2, WATER_LEVEL + 2.5, 0);
+    scene.add(leftPlatform);
+    trackElements.push(leftPlatform);
+    
+    const rightPlatform = new THREE.Mesh(rightPlatformGeometry, platformMaterial);
+    rightPlatform.position.set(waterChannelWidth/2 + sideWidth/2, WATER_LEVEL + 2.5, 0);
+    scene.add(rightPlatform);
+    trackElements.push(rightPlatform);
+    
+    // Create buoys/markers along the water channel
+    const buoyCount = 40;
+    const buoySpacing = trackLength / buoyCount;
+    
+    for (let i = 0; i < buoyCount; i++) {
+        // Left buoys
+        createBuoy(-waterChannelWidth/2 + 10, buoySpacing * i - trackLength/2 + buoySpacing/2, 0xff3333);
         
-        // Clear any existing track elements
-        if (trackBarriers && trackBarriers.length > 0) {
-            trackBarriers.forEach(barrier => scene.remove(barrier));
-            trackBarriers = [];
-        }
-        
-        if (checkpoints && checkpoints.length > 0) {
-            checkpoints.forEach(checkpoint => scene.remove(checkpoint));
-            checkpoints = [];
-        }
-        
-        if (boostPads && boostPads.length > 0) {
-            boostPads.forEach(pad => scene.remove(pad));
-            boostPads = [];
-        }
-        
-        if (waterJets && waterJets.length > 0) {
-            waterJets.forEach(jet => scene.remove(jet));
-            waterJets = [];
-        }
-        
-        if (hazards && hazards.length > 0) {
-            hazards.forEach(hazard => scene.remove(hazard));
-            hazards = [];
-        }
-        
-        if (trackLights && trackLights.length > 0) {
-            trackLights.forEach(light => scene.remove(light));
-            trackLights = [];
-        }
-        
-        // Create a loading manager to track progress
-        const loadingManager = new THREE.LoadingManager();
-        loadingManager.onProgress = function(url, itemsLoaded, itemsTotal) {
-            console.log('Loading track: ' + Math.round(itemsLoaded / itemsTotal * 100) + '%');
-        };
-        
-        loadingManager.onError = function(url) {
-            console.error('Error loading ' + url);
-        };
-        
-        // Create a temporary track while the model loads
-        createTemporaryTrack();
-        
-        // Load the track model
-        const loader = new GLTFLoader(loadingManager);
-        
-        // Try to load from a CDN first
-        const trackUrl = 'https://raw.githubusercontent.com/KwameDeLaFox/aquablitz/main/public/models/track.glb';
-        
-        loader.load(
-            trackUrl,
-            function(gltf) {
-                console.log('Track model loaded successfully');
-                
-                // Add the model to the scene
-                const trackModel = gltf.scene;
-                
-                // Scale and position the model
-                trackModel.scale.set(10, 10, 10);
-                trackModel.position.set(0, 0, 0);
-                
-                // Add the model to the scene
-                scene.add(trackModel);
-                trackBarriers.push(trackModel);
-                
-                // Extract any lights from the model
-                trackModel.traverse(function(child) {
-                    if (child.isLight) {
-                        trackLights.push(child);
-                    }
-                });
-                
-                // Reset player position to start of track
-                playerBoat.position.set(0, 15, -100);
-                playerBoat.rotation.y = 0; // Face forward
-                
-                // Update camera
-                camera.position.set(0, 100, playerBoat.position.z - 200);
-                controls.target.copy(playerBoat.position);
-                controls.update();
-                
-                // Add global lighting to make track more visible
-                const hemisphereLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1);
-                scene.add(hemisphereLight);
-                trackLights.push(hemisphereLight);
-                
-                // Add directional light to cast shadows and improve visibility
-                const dirLight = new THREE.DirectionalLight(0xffffff, 1);
-                dirLight.position.set(0, 200, 100);
-                dirLight.castShadow = true;
-                scene.add(dirLight);
-                trackLights.push(dirLight);
-            },
-            function(xhr) {
-                console.log('Track loading progress: ' + (xhr.loaded / xhr.total * 100) + '%');
-            },
-            function(error) {
-                console.error('Error loading track model:', error);
-                // If loading fails, create a basic track
-                createBasicTrack();
-            }
-        );
-        
-    } catch (error) {
-        console.error('Error creating track:', error);
-        // If an error occurs, create a basic track
-        createBasicTrack();
+        // Right buoys
+        createBuoy(waterChannelWidth/2 - 10, buoySpacing * i - trackLength/2 + buoySpacing/2, 0x33ff33);
+    }
+    
+    // Create checkpoints
+    const checkpointCount = 8;
+    const checkpointSpacing = trackLength / checkpointCount;
+    
+    for (let i = 0; i < checkpointCount; i++) {
+        createWaterCheckpoint(0, checkpointSpacing * i - trackLength/2 + checkpointSpacing/2, waterChannelWidth);
+    }
+    
+    // Create boost pads
+    const boostPadCount = 12;
+    const boostPadSpacing = trackLength / boostPadCount;
+    
+    for (let i = 0; i < boostPadCount; i++) {
+        // Alternate sides for boost pads
+        const xPos = (i % 2 === 0) ? -waterChannelWidth/4 : waterChannelWidth/4;
+        createBoostPad(xPos, boostPadSpacing * i - trackLength/2 + boostPadSpacing/2);
+    }
+    
+    // Create water jets/fountains as obstacles
+    const waterJetCount = 6;
+    const waterJetSpacing = trackLength / waterJetCount;
+    
+    for (let i = 0; i < waterJetCount; i++) {
+        // Place water jets in the middle, alternating slightly left and right
+        const xPos = (i % 2 === 0) ? -30 : 30;
+        createWaterJet(xPos, waterJetSpacing * i - trackLength/2 + waterJetSpacing/3);
+    }
+    
+    // Add decorative elements (docked boats, buildings, etc.)
+    for (let i = 0; i < 15; i++) {
+        const side = i % 2 === 0 ? -1 : 1;
+        const xPos = side * (waterChannelWidth/2 + sideWidth/2);
+        const zPos = (trackLength / 15) * i - trackLength/2 + trackLength/30;
+        createDockDecoration(xPos, zPos, side);
+    }
+    
+    // Add lighting
+    addTrackLighting(trackLength, waterChannelWidth, sideWidth);
+    
+    // Set player position
+    resetPlayerPosition();
+    
+    console.log("Boat racing track created with:", {
+        "Track Elements": trackElements.length,
+        "Barriers": barriers.length,
+        "Checkpoints": checkpoints.length,
+        "Boost Pads": boostPads.length,
+        "Water Jets": waterJets.length
+    });
+}
+
+// Helper functions for track elements
+function createBuoy(x, z, color) {
+    // Create buoy base (floating part)
+    const buoyGeometry = new THREE.CylinderGeometry(5, 5, 4, 16);
+    const buoyMaterial = new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.5,
+        metalness: 0.2,
+        emissive: color,
+        emissiveIntensity: 0.5
+    });
+    
+    const buoy = new THREE.Mesh(buoyGeometry, buoyMaterial);
+    buoy.position.set(x, WATER_LEVEL + 2, z);
+    scene.add(buoy);
+    trackElements.push(buoy);
+    barriers.push(buoy); // So boats can collide with it
+    
+    // Add pole on top
+    const poleGeometry = new THREE.CylinderGeometry(1, 1, 15, 8);
+    const poleMaterial = new THREE.MeshStandardMaterial({
+        color: 0xbbbbbb,
+        roughness: 0.5
+    });
+    
+    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+    pole.position.set(x, WATER_LEVEL + 11.5, z);
+    scene.add(pole);
+    trackElements.push(pole);
+    
+    // Add light on top of pole
+    const lightGeometry = new THREE.SphereGeometry(2, 16, 16);
+    const lightMaterial = new THREE.MeshStandardMaterial({
+        color: color,
+        emissive: color,
+        emissiveIntensity: 1.0,
+        transparent: true,
+        opacity: 0.9
+    });
+    
+    const light = new THREE.Mesh(lightGeometry, lightMaterial);
+    light.position.set(x, WATER_LEVEL + 20, z);
+    scene.add(light);
+    trackElements.push(light);
+    
+    // Add actual point light
+    const pointLight = new THREE.PointLight(color, 1, 50);
+    pointLight.position.set(x, WATER_LEVEL + 20, z);
+    scene.add(pointLight);
+    trackElements.push(pointLight);
+    trackLights.push(pointLight);
+}
+
+function createWaterCheckpoint(x, z, width) {
+    const checkpointGeometry = new THREE.PlaneGeometry(width, 60);
+    const checkpointMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffff00,
+        transparent: true,
+        opacity: 0.3,
+        side: THREE.DoubleSide,
+        emissive: 0xffff00,
+        emissiveIntensity: 0.5
+    });
+    
+    const checkpoint = new THREE.Mesh(checkpointGeometry, checkpointMaterial);
+    checkpoint.rotation.x = Math.PI / 2;
+    checkpoint.position.set(x, WATER_LEVEL + 30, z);
+    scene.add(checkpoint);
+    trackElements.push(checkpoint);
+    checkpoints.push({
+        object: checkpoint,
+        position: new THREE.Vector3(x, WATER_LEVEL, z),
+        passed: false
+    });
+    
+    // Add arches for the checkpoint
+    const archHeight = 80;
+    const archWidth = width + 40;
+    
+    const leftPillarGeometry = new THREE.CylinderGeometry(5, 5, archHeight, 16);
+    const rightPillarGeometry = new THREE.CylinderGeometry(5, 5, archHeight, 16);
+    const topArchGeometry = new THREE.CylinderGeometry(3, 3, archWidth, 16);
+    
+    const pillarMaterial = new THREE.MeshStandardMaterial({
+        color: 0xdddddd,
+        roughness: 0.5,
+        metalness: 0.5
+    });
+    
+    // Left pillar
+    const leftPillar = new THREE.Mesh(leftPillarGeometry, pillarMaterial);
+    leftPillar.position.set(x - width/2 - 20, WATER_LEVEL + archHeight/2, z);
+    scene.add(leftPillar);
+    trackElements.push(leftPillar);
+    
+    // Right pillar
+    const rightPillar = new THREE.Mesh(rightPillarGeometry, pillarMaterial);
+    rightPillar.position.set(x + width/2 + 20, WATER_LEVEL + archHeight/2, z);
+    scene.add(rightPillar);
+    trackElements.push(rightPillar);
+    
+    // Top arch
+    const topArch = new THREE.Mesh(topArchGeometry, pillarMaterial);
+    topArch.rotation.z = Math.PI / 2;
+    topArch.position.set(x, WATER_LEVEL + archHeight, z);
+    scene.add(topArch);
+    trackElements.push(topArch);
+    
+    // Add checkpoint number
+    const checkpointNumber = checkpoints.length;
+    
+    // Add checkpoint light
+    const checkpointLight = new THREE.PointLight(0xffff00, 2, 100);
+    checkpointLight.position.set(x, WATER_LEVEL + archHeight/2, z);
+    scene.add(checkpointLight);
+    trackElements.push(checkpointLight);
+    trackLights.push(checkpointLight);
+}
+
+function createBoostPad(x, z) {
+    const boostPadGeometry = new THREE.BoxGeometry(30, 1, 50);
+    const boostPadMaterial = new THREE.MeshStandardMaterial({
+        color: 0x00ffff,
+        emissive: 0x00ffff,
+        emissiveIntensity: 0.8,
+        transparent: true,
+        opacity: 0.7
+    });
+    
+    const boostPad = new THREE.Mesh(boostPadGeometry, boostPadMaterial);
+    boostPad.position.set(x, WATER_LEVEL + 2, z);
+    scene.add(boostPad);
+    trackElements.push(boostPad);
+    boostPads.push({
+        object: boostPad,
+        position: new THREE.Vector3(x, WATER_LEVEL, z),
+        activated: false
+    });
+    
+    // Add boost pad light
+    const boostLight = new THREE.PointLight(0x00ffff, 2, 50);
+    boostLight.position.set(x, WATER_LEVEL + 5, z);
+    scene.add(boostLight);
+    trackElements.push(boostLight);
+    trackLights.push(boostLight);
+}
+
+function createWaterJet(x, z) {
+    // Base of the water jet
+    const baseGeometry = new THREE.CylinderGeometry(15, 20, 8, 16);
+    const baseMaterial = new THREE.MeshStandardMaterial({
+        color: 0x666666,
+        roughness: 0.8
+    });
+    
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.set(x, WATER_LEVEL - 2, z);
+    scene.add(base);
+    trackElements.push(base);
+    
+    // Jet water column (animated in update)
+    const jetGeometry = new THREE.CylinderGeometry(5, 10, 50, 16);
+    const jetMaterial = new THREE.MeshStandardMaterial({
+        color: 0x00aaff,
+        transparent: true,
+        opacity: 0.7,
+        emissive: 0x0055aa,
+        emissiveIntensity: 0.5
+    });
+    
+    const jet = new THREE.Mesh(jetGeometry, jetMaterial);
+    jet.position.set(x, WATER_LEVEL + 25, z);
+    scene.add(jet);
+    trackElements.push(jet);
+    waterJets.push({
+        object: jet,
+        basePosition: new THREE.Vector3(x, WATER_LEVEL + 25, z),
+        height: 50,
+        phase: Math.random() * Math.PI * 2
+    });
+    
+    // Add water jet as a hazard for collision detection
+    hazards.push(jet);
+    
+    // Add water jet light
+    const jetLight = new THREE.PointLight(0x00aaff, 1.5, 70);
+    jetLight.position.set(x, WATER_LEVEL + 25, z);
+    scene.add(jetLight);
+    trackElements.push(jetLight);
+    trackLights.push(jetLight);
+}
+
+function createDockDecoration(x, z, side) {
+    // Random selection of decoration type
+    const decorType = Math.floor(Math.random() * 3);
+    
+    if (decorType === 0) {
+        // Docked boat
+        createDockedBoat(x + (side * 40), z);
+    } else if (decorType === 1) {
+        // Small building/hut
+        createDockBuilding(x + (side * 30), z);
+    } else {
+        // Lighting pole
+        createLightingPole(x + (side * 20), z);
     }
 }
 
-// Create a temporary track while the model loads
-function createTemporaryTrack() {
-    // Create a simple platform
-    const platformGeometry = new THREE.BoxGeometry(500, 10, 1000);
-    const platformMaterial = new THREE.MeshBasicMaterial({ color: 0x666666 });
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-    platform.position.set(0, 5, 0);
-    scene.add(platform);
-    trackBarriers.push(platform);
+function createDockedBoat(x, z) {
+    // Boat hull
+    const hullGeometry = new THREE.BoxGeometry(20, 10, 40);
+    const hullMaterial = new THREE.MeshStandardMaterial({
+        color: Math.random() > 0.5 ? 0x3366ff : 0xff6633,
+        roughness: 0.7
+    });
     
-    // Add a loading message
-    const loadingDiv = document.createElement('div');
-    loadingDiv.id = 'loading-message';
-    loadingDiv.style.position = 'absolute';
-    loadingDiv.style.top = '50%';
-    loadingDiv.style.left = '50%';
-    loadingDiv.style.transform = 'translate(-50%, -50%)';
-    loadingDiv.style.color = 'white';
-    loadingDiv.style.fontSize = '24px';
-    loadingDiv.style.fontWeight = 'bold';
-    loadingDiv.style.textShadow = '2px 2px 4px rgba(0,0,0,0.5)';
-    loadingDiv.style.zIndex = '1000';
-    loadingDiv.textContent = 'Loading Track...';
-    document.body.appendChild(loadingDiv);
+    const hull = new THREE.Mesh(hullGeometry, hullMaterial);
+    hull.position.set(x, WATER_LEVEL + 5, z);
+    scene.add(hull);
+    trackElements.push(hull);
     
-    // Remove the loading message after 10 seconds
-    setTimeout(() => {
-        if (document.getElementById('loading-message')) {
-            document.body.removeChild(loadingDiv);
-        }
-    }, 10000);
+    // Boat cabin
+    const cabinGeometry = new THREE.BoxGeometry(15, 12, 20);
+    const cabinMaterial = new THREE.MeshStandardMaterial({
+        color: 0xffffff,
+        roughness: 0.6
+    });
+    
+    const cabin = new THREE.Mesh(cabinGeometry, cabinMaterial);
+    cabin.position.set(x, WATER_LEVEL + 16, z - 5);
+    scene.add(cabin);
+    trackElements.push(cabin);
 }
 
-// Create a basic track if the model fails to load
-function createBasicTrack() {
-    console.log('Creating basic track as fallback...');
+function createDockBuilding(x, z) {
+    // Building base
+    const baseGeometry = new THREE.BoxGeometry(40, 30, 40);
+    const baseMaterial = new THREE.MeshStandardMaterial({
+        color: 0xdddddd,
+        roughness: 0.8
+    });
     
-    // Create a single large platform for the track
-    const platformGeometry = new THREE.BoxGeometry(500, 10, 10000);
-    const platformMaterial = new THREE.MeshBasicMaterial({ color: 0xff0000 }); // Bright red
-    const platform = new THREE.Mesh(platformGeometry, platformMaterial);
-    platform.position.set(0, 5, 0); // Position above water
-    scene.add(platform);
-    trackBarriers.push(platform);
+    const base = new THREE.Mesh(baseGeometry, baseMaterial);
+    base.position.set(x, WATER_LEVEL + 15, z);
+    scene.add(base);
+    trackElements.push(base);
     
-    // Create left barrier
-    const leftBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
-    const leftBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x00ff00 }); // Bright green
-    const leftBarrier = new THREE.Mesh(leftBarrierGeometry, leftBarrierMaterial);
-    leftBarrier.position.set(-260, 25, 0); // Position to the left
-    scene.add(leftBarrier);
-    trackBarriers.push(leftBarrier);
+    // Building roof
+    const roofGeometry = new THREE.ConeGeometry(30, 20, 4);
+    const roofMaterial = new THREE.MeshStandardMaterial({
+        color: 0xff3333,
+        roughness: 0.8
+    });
     
-    // Create right barrier
-    const rightBarrierGeometry = new THREE.BoxGeometry(20, 50, 10000);
-    const rightBarrierMaterial = new THREE.MeshBasicMaterial({ color: 0x0000ff }); // Bright blue
-    const rightBarrier = new THREE.Mesh(rightBarrierGeometry, rightBarrierMaterial);
-    rightBarrier.position.set(260, 25, 0); // Position to the right
-    scene.add(rightBarrier);
-    trackBarriers.push(rightBarrier);
+    const roof = new THREE.Mesh(roofGeometry, roofMaterial);
+    roof.position.set(x, WATER_LEVEL + 40, z);
+    roof.rotation.y = Math.PI / 4;
+    scene.add(roof);
+    trackElements.push(roof);
     
-    // Add lane markings
-    for (let z = -5000; z < 5000; z += 200) {
-        const markingGeometry = new THREE.BoxGeometry(20, 1, 100);
-        const markingMaterial = new THREE.MeshBasicMaterial({ color: 0xffffff }); // White
-        const marking = new THREE.Mesh(markingGeometry, markingMaterial);
-        marking.position.set(0, 10.1, z); // Position just above the platform
-        scene.add(marking);
-        trackBarriers.push(marking);
+    // Small window
+    const windowGeometry = new THREE.PlaneGeometry(10, 10);
+    const windowMaterial = new THREE.MeshStandardMaterial({
+        color: 0x88ccff,
+        roughness: 0.2,
+        metalness: 0.8,
+        emissive: 0x88ccff,
+        emissiveIntensity: 0.5,
+        side: THREE.DoubleSide
+    });
+    
+    const window = new THREE.Mesh(windowGeometry, windowMaterial);
+    window.position.set(x, WATER_LEVEL + 15, z + 20.1);
+    scene.add(window);
+    trackElements.push(window);
+}
+
+function createLightingPole(x, z) {
+    // Pole
+    const poleGeometry = new THREE.CylinderGeometry(2, 2, 50, 8);
+    const poleMaterial = new THREE.MeshStandardMaterial({
+        color: 0x444444,
+        roughness: 0.8
+    });
+    
+    const pole = new THREE.Mesh(poleGeometry, poleMaterial);
+    pole.position.set(x, WATER_LEVEL + 25, z);
+    scene.add(pole);
+    trackElements.push(pole);
+    
+    // Light fixture
+    const fixtureGeometry = new THREE.CylinderGeometry(5, 8, 8, 16);
+    const fixtureMaterial = new THREE.MeshStandardMaterial({
+        color: 0x333333,
+        roughness: 0.5
+    });
+    
+    const fixture = new THREE.Mesh(fixtureGeometry, fixtureMaterial);
+    fixture.position.set(x, WATER_LEVEL + 46, z);
+    scene.add(fixture);
+    trackElements.push(fixture);
+    
+    // Add light
+    const light = new THREE.PointLight(0xffffaa, 1, 100);
+    light.position.set(x, WATER_LEVEL + 46, z);
+    scene.add(light);
+    trackElements.push(light);
+    trackLights.push(light);
+}
+
+function addTrackLighting(trackLength, waterChannelWidth, sideWidth) {
+    // Add ambient track lighting
+    const ambientTrackLight = new THREE.AmbientLight(0x222233, 1.5);
+    scene.add(ambientTrackLight);
+    trackElements.push(ambientTrackLight);
+    
+    // Add spotlight at start/finish
+    const startLight = new THREE.SpotLight(0xffffff, 2, 300, Math.PI / 6, 0.5);
+    startLight.position.set(0, WATER_LEVEL + 100, -trackLength/2);
+    startLight.target.position.set(0, WATER_LEVEL, -trackLength/2 + 50);
+    scene.add(startLight);
+    scene.add(startLight.target);
+    trackElements.push(startLight);
+    trackLights.push(startLight);
+}
+
+function resetPlayerPosition() {
+    if (playerBoat) {
+        // Position the player at the start of the track
+        playerBoat.position.set(0, WATER_LEVEL + 15, -4500);
+        playerBoat.rotation.y = 0;
+        
+        // Reset player physics
+        velocity.set(0, 0, 0);
+        acceleration.set(0, 0, 0);
+        
+        // Update camera
+        updateCameraPosition();
     }
-    
-    // Reset player position to start of track
-    playerBoat.position.set(0, 15, -4500);
-    playerBoat.rotation.y = 0; // Face forward
-    
-    // Update camera
-    camera.position.set(0, 100, playerBoat.position.z - 200);
-    controls.target.copy(playerBoat.position);
-    controls.update();
-    
-    // Add a bright ambient light
-    const ambientLight = new THREE.AmbientLight(0xffffff, 2);
-    scene.add(ambientLight);
-    trackLights.push(ambientLight);
-    
-    // Add directional light
-    const directionalLight = new THREE.DirectionalLight(0xffffff, 2);
-    directionalLight.position.set(0, 100, 0);
-    scene.add(directionalLight);
-    trackLights.push(directionalLight);
-    
-    console.log('Basic track created successfully');
 }
 
 // Handle window resizing
@@ -812,6 +1066,22 @@ function update() {
                 }, 1000);
             }, 0);
         }
+
+        // Animate water jets
+        waterJets.forEach(jet => {
+            const time = Date.now() * 0.001;
+            const height = 40 + Math.sin(time + jet.phase) * 20;
+            
+            // Update jet height and position
+            jet.object.scale.y = height / 50;
+            jet.object.position.y = jet.basePosition.y + (height - 50) / 2;
+            
+            // Update corresponding light
+            const lightIndex = trackElements.indexOf(jet.object) + 1;
+            if (lightIndex < trackElements.length && trackLights.includes(trackElements[lightIndex])) {
+                trackElements[lightIndex].position.y = jet.basePosition.y + height / 2;
+            }
+        });
     } catch (error) {
         console.error('Error in update function:', error);
     }
